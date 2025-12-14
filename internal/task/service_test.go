@@ -1,0 +1,293 @@
+package task
+
+import (
+	"testing"
+	"time"
+)
+
+// mockStorage implements Storage interface for testing
+type mockStorage struct {
+	tasks map[int]*Task
+}
+
+func newMockStorage() *mockStorage {
+	return &mockStorage{tasks: make(map[int]*Task)}
+}
+
+func (m *mockStorage) Save(t *Task) error {
+	m.tasks[t.ID] = t
+	return nil
+}
+
+func (m *mockStorage) Load(id int) (*Task, error) {
+	return m.tasks[id], nil
+}
+
+func (m *mockStorage) Delete(id int) error {
+	delete(m.tasks, id)
+	return nil
+}
+
+func (m *mockStorage) EnsureDir() error {
+	return nil
+}
+
+// mockIndex implements Index interface for testing
+type mockIndex struct {
+	tasks  map[int]*Task
+	nextID int
+}
+
+func newMockIndex() *mockIndex {
+	return &mockIndex{tasks: make(map[int]*Task), nextID: 1}
+}
+
+func (m *mockIndex) Load() error { return nil }
+func (m *mockIndex) Save() error { return nil }
+
+func (m *mockIndex) Get(id int) (*Task, bool) {
+	t, ok := m.tasks[id]
+	return t, ok
+}
+
+func (m *mockIndex) Set(t *Task) {
+	m.tasks[t.ID] = t
+	if t.ID >= m.nextID {
+		m.nextID = t.ID + 1
+	}
+}
+
+func (m *mockIndex) Delete(id int) {
+	delete(m.tasks, id)
+}
+
+func (m *mockIndex) All() []*Task {
+	result := make([]*Task, 0, len(m.tasks))
+	for _, t := range m.tasks {
+		result = append(result, t)
+	}
+	return result
+}
+
+func (m *mockIndex) Filter(status *Status, priority *Priority, taskType *string) []*Task {
+	var result []*Task
+	for _, t := range m.tasks {
+		if status != nil && t.Status != *status {
+			continue
+		}
+		if priority != nil && t.Priority != *priority {
+			continue
+		}
+		if taskType != nil && t.Type != *taskType {
+			continue
+		}
+		result = append(result, t)
+	}
+	return result
+}
+
+func (m *mockIndex) NextTodo() *Task {
+	var best *Task
+	for _, t := range m.tasks {
+		if t.Status != StatusTodo {
+			continue
+		}
+		if best == nil || t.Priority.Order() < best.Priority.Order() ||
+			(t.Priority.Order() == best.Priority.Order() && t.CreatedAt.Before(best.CreatedAt)) {
+			best = t
+		}
+	}
+	return best
+}
+
+func (m *mockIndex) NextID() int {
+	return m.nextID
+}
+
+func TestService_Create(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	if err := svc.Initialize(); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	task, err := svc.Create("Test Task", "Description", PriorityHigh, "feature")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if task.ID != 1 {
+		t.Errorf("ID = %d, want 1", task.ID)
+	}
+	if task.Title != "Test Task" {
+		t.Errorf("Title = %q, want %q", task.Title, "Test Task")
+	}
+	if task.Status != StatusTodo {
+		t.Errorf("Status = %q, want %q", task.Status, StatusTodo)
+	}
+}
+
+func TestService_Create_Validation(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	tests := []struct {
+		name     string
+		title    string
+		priority Priority
+		taskType string
+		wantErr  bool
+	}{
+		{"valid", "Title", PriorityHigh, "feature", false},
+		{"empty title", "", PriorityHigh, "feature", true},
+		{"invalid priority", "Title", Priority("invalid"), "feature", true},
+		{"invalid type", "Title", PriorityHigh, "invalid", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.Create(tt.title, "desc", tt.priority, tt.taskType)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Create() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestService_Update(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	task, _ := svc.Create("Original", "Desc", PriorityMedium, "feature")
+
+	newTitle := "Updated"
+	newStatus := StatusInProgress
+	updated, err := svc.Update(task.ID, &newTitle, nil, &newStatus, nil, nil)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	if updated.Title != "Updated" {
+		t.Errorf("Title = %q, want %q", updated.Title, "Updated")
+	}
+	if updated.Status != StatusInProgress {
+		t.Errorf("Status = %q, want %q", updated.Status, StatusInProgress)
+	}
+}
+
+func TestService_Delete(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	task, _ := svc.Create("To Delete", "Desc", PriorityMedium, "feature")
+
+	if err := svc.Delete(task.ID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	if _, err := svc.Get(task.ID); err == nil {
+		t.Error("Get() after Delete() should return error")
+	}
+}
+
+func TestService_TaskWorkflow(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	// Create
+	task, _ := svc.Create("Workflow Test", "Desc", PriorityHigh, "feature")
+	if task.Status != StatusTodo {
+		t.Fatalf("initial status = %q, want todo", task.Status)
+	}
+
+	// Start
+	task, err := svc.StartTask(task.ID)
+	if err != nil {
+		t.Fatalf("StartTask() error = %v", err)
+	}
+	if task.Status != StatusInProgress {
+		t.Errorf("status after start = %q, want in_progress", task.Status)
+	}
+
+	// Complete
+	task, err = svc.CompleteTask(task.ID)
+	if err != nil {
+		t.Fatalf("CompleteTask() error = %v", err)
+	}
+	if task.Status != StatusDone {
+		t.Errorf("status after complete = %q, want done", task.Status)
+	}
+}
+
+func TestService_StartTask_InvalidState(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature")
+
+	// Start the task
+	svc.StartTask(task.ID)
+
+	// Try to start again - should fail
+	_, err := svc.StartTask(task.ID)
+	if err == nil {
+		t.Error("StartTask() on in_progress task should fail")
+	}
+}
+
+func TestService_CompleteTask_InvalidState(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature")
+
+	// Try to complete without starting - should fail
+	_, err := svc.CompleteTask(task.ID)
+	if err == nil {
+		t.Error("CompleteTask() on todo task should fail")
+	}
+}
+
+func TestService_GetNextTask(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	// Empty
+	if got := svc.GetNextTask(); got != nil {
+		t.Errorf("GetNextTask() on empty = %v, want nil", got)
+	}
+
+	// Add tasks with different priorities
+	svc.Create("Low", "Desc", PriorityLow, "feature")
+	time.Sleep(time.Millisecond) // Ensure different timestamps
+	svc.Create("Critical", "Desc", PriorityCritical, "bug")
+
+	next := svc.GetNextTask()
+	if next == nil {
+		t.Fatal("GetNextTask() returned nil")
+	}
+	if next.Priority != PriorityCritical {
+		t.Errorf("GetNextTask() priority = %q, want critical", next.Priority)
+	}
+}
+
+func TestService_List(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	svc.Create("Task 1", "Desc", PriorityHigh, "feature")
+	svc.Create("Task 2", "Desc", PriorityLow, "bug")
+	svc.Create("Task 3", "Desc", PriorityMedium, "feature")
+
+	// All
+	all := svc.List(nil, nil, nil)
+	if len(all) != 3 {
+		t.Errorf("List() all = %d, want 3", len(all))
+	}
+
+	// By type
+	featureType := "feature"
+	features := svc.List(nil, nil, &featureType)
+	if len(features) != 2 {
+		t.Errorf("List() by feature = %d, want 2", len(features))
+	}
+}
