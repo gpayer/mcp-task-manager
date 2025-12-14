@@ -1,0 +1,147 @@
+# MCP Task Manager
+
+A Go-based MCP (Model Context Protocol) server for task management, designed for Claude and coding agents.
+
+## Overview
+
+MCP Task Manager provides a simple but powerful task management system that integrates with AI coding assistants via the Model Context Protocol. Tasks are stored as human-readable Markdown files with YAML frontmatter, making them easy to version control and inspect.
+
+### Features
+
+- **Markdown-based storage** - Tasks stored as `.md` files with YAML frontmatter
+- **Priority-based workflow** - Critical > High > Medium > Low, with oldest-first tiebreaker
+- **Agent-friendly tools** - `get_next_task`, `start_task`, `complete_task` for automated workflows
+- **Self-healing index** - JSON index cache rebuilds automatically from source files
+- **Configurable task types** - Default: `feature`, `bug`; extensible via config
+
+## Installation
+
+### Prerequisites
+
+- Go 1.21 or later
+
+### Build from Source
+
+```bash
+git clone https://github.com/gpayer/mcp-task-manager.git
+cd mcp-task-manager
+go build -o mcp-task-manager ./cmd/mcp-task-manager
+```
+
+## Usage
+
+### Running the Server
+
+The MCP server communicates via stdio:
+
+```bash
+./mcp-task-manager
+```
+
+### Claude Desktop Integration
+
+Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json` on Linux, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "task-manager": {
+      "command": "/path/to/mcp-task-manager"
+    }
+  }
+}
+```
+
+## MCP Tools
+
+### Task Management
+
+| Tool | Description |
+|------|-------------|
+| `create_task` | Create a new task with title, description, priority, type |
+| `update_task` | Modify task fields (title, description, status, priority, type) |
+| `list_tasks` | List tasks with optional filters (status, priority, type) |
+| `get_task` | Get full details of a task by ID |
+| `delete_task` | Remove a task |
+
+### Agent Workflow
+
+| Tool | Description |
+|------|-------------|
+| `get_next_task` | Returns highest priority `todo` task |
+| `start_task` | Move task from `todo` to `in_progress` |
+| `complete_task` | Move task from `in_progress` to `done` |
+
+## Configuration
+
+### Config File
+
+Create `mcp-tasks.yaml` in the working directory:
+
+```yaml
+task_types:
+  - feature
+  - bug
+  - chore
+  - docs
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MCP_TASKS_DIR` | Directory for task storage | `./tasks` |
+
+## Task Format
+
+Tasks are stored as Markdown files with YAML frontmatter:
+
+```yaml
+---
+id: 1
+title: "Implement user authentication"
+status: todo
+priority: high
+type: feature
+created_at: 2025-01-15T10:30:00Z
+updated_at: 2025-01-15T10:30:00Z
+---
+
+Detailed description in Markdown format.
+
+- Acceptance criteria
+- Implementation notes
+- Links and references
+```
+
+### Status Values
+
+- `todo` - Task is pending
+- `in_progress` - Task is actively being worked on
+- `done` - Task is completed
+
+### Priority Levels
+
+- `critical` - Highest priority
+- `high` - Important tasks
+- `medium` - Normal priority (default)
+- `low` - Can wait
+
+## Project Structure
+
+```
+mcp-task-manager/
+├── cmd/mcp-task-manager/    # Entry point
+├── internal/
+│   ├── config/              # Configuration loading
+│   ├── storage/             # Markdown + index storage
+│   ├── task/                # Task model and service
+│   └── tools/               # MCP tool handlers
+├── tasks/                   # Task storage (created at runtime)
+├── mcp-tasks.yaml           # Configuration file
+└── CLAUDE.md                # AI assistant instructions
+```
+
+## License
+
+MIT License - see LICENSE file for details.
