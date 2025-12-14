@@ -24,6 +24,29 @@ A Go-based MCP server for task management, designed for Claude and coding agents
     ./tasks/*.md           ./tasks/.index.json
 ```
 
+## Development Process
+
+### Planning, Code Review & Testing
+Use the **task manager MCP tools** to organize work:
+- `create_task` - Add new tasks for planned work
+- `update_task` - Update task status, priority, or details
+- `list_tasks` - Review current task state and priorities
+- `delete_task` - Remove obsolete tasks
+
+### Implementation
+Use the **task manager MCP tools** to get work assignments:
+- `get_next_task` - Get the highest priority todo task
+- `get_task` - Get a specific task by ID (when directed)
+- `start_task` - Mark a task as in progress before starting work
+- `complete_task` - Mark a task as done after finishing
+
+### Code Research & Refactoring
+Use the **cclsp MCP tools** (LSP server access) for code navigation:
+- `find_definition` - Find where a symbol is defined
+- `find_references` - Find all usages of a symbol across the codebase
+- `rename_symbol` - Safely rename symbols with LSP support
+- `get_diagnostics` - Get language diagnostics (errors, warnings) for a file
+
 ## Design Decisions
 
 ### Storage

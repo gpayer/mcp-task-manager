@@ -2,7 +2,7 @@
 mcp-task-manager
 
 # Task data (generated at runtime)
-tasks/
+tasks/.index.json
 
 # IDE
 .idea/
