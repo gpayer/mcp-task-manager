@@ -146,3 +146,198 @@ func TestMarkdownStorage_NextID(t *testing.T) {
 		t.Errorf("NextID() = %d, want 6", id)
 	}
 }
+
+func TestIndex_SetGetDelete(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	tk := &task.Task{
+		ID:        1,
+		Title:     "Test",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityHigh,
+		Type:      "feature",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	// Set
+	idx.Set(tk)
+
+	// Get
+	got, ok := idx.Get(1)
+	if !ok {
+		t.Fatal("Get() returned false for existing task")
+	}
+	if got.Title != tk.Title {
+		t.Errorf("Get() title = %q, want %q", got.Title, tk.Title)
+	}
+
+	// Delete
+	idx.Delete(1)
+	_, ok = idx.Get(1)
+	if ok {
+		t.Error("Get() returned true for deleted task")
+	}
+}
+
+func TestIndex_Filter(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	tasks := []*task.Task{
+		{ID: 1, Title: "Task 1", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now, UpdatedAt: now},
+		{ID: 2, Title: "Task 2", Status: task.StatusDone, Priority: task.PriorityLow, Type: "bug", CreatedAt: now, UpdatedAt: now},
+		{ID: 3, Title: "Task 3", Status: task.StatusTodo, Priority: task.PriorityMedium, Type: "feature", CreatedAt: now, UpdatedAt: now},
+	}
+	for _, tk := range tasks {
+		idx.Set(tk)
+	}
+
+	// Filter by status
+	todoStatus := task.StatusTodo
+	filtered := idx.Filter(&todoStatus, nil, nil)
+	if len(filtered) != 2 {
+		t.Errorf("Filter by todo status returned %d tasks, want 2", len(filtered))
+	}
+
+	// Filter by priority
+	highPriority := task.PriorityHigh
+	filtered = idx.Filter(nil, &highPriority, nil)
+	if len(filtered) != 1 {
+		t.Errorf("Filter by high priority returned %d tasks, want 1", len(filtered))
+	}
+
+	// Filter by type
+	featureType := "feature"
+	filtered = idx.Filter(nil, nil, &featureType)
+	if len(filtered) != 2 {
+		t.Errorf("Filter by feature type returned %d tasks, want 2", len(filtered))
+	}
+
+	// Combined filter
+	filtered = idx.Filter(&todoStatus, nil, &featureType)
+	if len(filtered) != 2 {
+		t.Errorf("Combined filter returned %d tasks, want 2", len(filtered))
+	}
+}
+
+func TestIndex_NextTodo(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Empty index
+	if got := idx.NextTodo(); got != nil {
+		t.Errorf("NextTodo() on empty index = %v, want nil", got)
+	}
+
+	now := time.Now().UTC()
+	tasks := []*task.Task{
+		{ID: 1, Title: "Low", Status: task.StatusTodo, Priority: task.PriorityLow, Type: "feature", CreatedAt: now, UpdatedAt: now},
+		{ID: 2, Title: "Critical", Status: task.StatusTodo, Priority: task.PriorityCritical, Type: "bug", CreatedAt: now.Add(time.Hour), UpdatedAt: now},
+		{ID: 3, Title: "Critical Older", Status: task.StatusTodo, Priority: task.PriorityCritical, Type: "feature", CreatedAt: now, UpdatedAt: now},
+		{ID: 4, Title: "Done", Status: task.StatusDone, Priority: task.PriorityCritical, Type: "bug", CreatedAt: now, UpdatedAt: now},
+	}
+	for _, tk := range tasks {
+		idx.Set(tk)
+	}
+
+	// Should return Critical Older (highest priority, oldest)
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 3 {
+		t.Errorf("NextTodo() ID = %d, want 3 (Critical Older)", next.ID)
+	}
+}
+
+func TestIndex_NextID(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Empty
+	if got := idx.NextID(); got != 1 {
+		t.Errorf("NextID() on empty = %d, want 1", got)
+	}
+
+	// Add tasks
+	now := time.Now().UTC()
+	idx.Set(&task.Task{ID: 5, Title: "Task", Status: task.StatusTodo, Priority: task.PriorityMedium, Type: "feature", CreatedAt: now, UpdatedAt: now})
+	idx.Set(&task.Task{ID: 3, Title: "Task", Status: task.StatusTodo, Priority: task.PriorityMedium, Type: "feature", CreatedAt: now, UpdatedAt: now})
+
+	if got := idx.NextID(); got != 6 {
+		t.Errorf("NextID() = %d, want 6", got)
+	}
+}
+
+func TestIndex_SaveAndLoad(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	tk := &task.Task{
+		ID:        1,
+		Title:     "Persisted",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityHigh,
+		Type:      "feature",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	idx.Set(tk)
+
+	if err := idx.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Create new index and load
+	idx2 := NewIndex(dir, storage)
+	if err := idx2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	got, ok := idx2.Get(1)
+	if !ok {
+		t.Fatal("Get() after Load() returned false")
+	}
+	if got.Title != tk.Title {
+		t.Errorf("Title after Load() = %q, want %q", got.Title, tk.Title)
+	}
+}
+
+func TestIndex_RebuildFromFiles(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+
+	// Save tasks directly to storage
+	now := time.Now().UTC()
+	tasks := []*task.Task{
+		{ID: 1, Title: "Task 1", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now, UpdatedAt: now},
+		{ID: 2, Title: "Task 2", Status: task.StatusDone, Priority: task.PriorityLow, Type: "bug", CreatedAt: now, UpdatedAt: now},
+	}
+	for _, tk := range tasks {
+		if err := storage.Save(tk); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+
+	// Create index without existing index file (triggers rebuild)
+	idx := NewIndex(dir, storage)
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Verify tasks were loaded
+	all := idx.All()
+	if len(all) != 2 {
+		t.Errorf("All() after rebuild returned %d tasks, want 2", len(all))
+	}
+}
