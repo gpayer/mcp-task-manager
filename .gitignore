@@ -1,0 +1,14 @@
+# Binary
+mcp-task-manager
+
+# Task data (generated at runtime)
+tasks/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
