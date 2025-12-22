@@ -36,3 +36,36 @@ func TestHelpFlag(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d", code)
 	}
 }
+
+func TestListCommand(t *testing.T) {
+	// Create temp directory for tasks
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "list"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	// Empty list should show "No tasks"
+	if !strings.Contains(stdout.String(), "No tasks") {
+		t.Errorf("expected 'No tasks' message, got: %s", stdout.String())
+	}
+}
+
+func TestListCommandJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "list", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "[") {
+		t.Errorf("expected JSON array output, got: %s", output)
+	}
+}
