@@ -4,7 +4,14 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/integrii/flaggy"
 )
+
+func init() {
+	// Enable panic instead of exit for testing
+	flaggy.PanicInsteadOfExit = true
+}
 
 func TestVersionCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer

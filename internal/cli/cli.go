@@ -19,9 +19,6 @@ func Run() {
 
 // RunWithArgs executes the CLI with given arguments (for testing)
 func RunWithArgs(args []string, stdout, stderr io.Writer) int {
-	// Enable panic instead of exit for testing
-	flaggy.PanicInsteadOfExit = true
-
 	// Reset flaggy for fresh parsing
 	flaggy.ResetParser()
 

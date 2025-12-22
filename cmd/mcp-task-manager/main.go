@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"os"
 
+	"github.com/gpayer/mcp-task-manager/internal/cli"
 	"github.com/gpayer/mcp-task-manager/internal/config"
 	"github.com/gpayer/mcp-task-manager/internal/storage"
 	"github.com/gpayer/mcp-task-manager/internal/task"
@@ -11,6 +13,13 @@ import (
 )
 
 func main() {
+	// CLI mode if any arguments provided
+	if len(os.Args) > 1 {
+		cli.Run()
+		return
+	}
+
+	// MCP server mode
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
