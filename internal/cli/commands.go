@@ -125,3 +125,29 @@ func cmdNext(stdout, stderr io.Writer, jsonOutput bool) int {
 
 	return 0
 }
+
+// cmdCreate handles the create command
+func cmdCreate(stdout, stderr io.Writer, jsonOutput bool, title, priority, taskType, description string) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	t, err := svc.Create(title, description, task.Priority(priority), taskType)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if jsonOutput {
+		if err := FormatJSON(stdout, t); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprint(stdout, FormatTaskDetail(t))
+	}
+
+	return 0
+}

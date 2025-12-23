@@ -106,3 +106,39 @@ func TestNextCommandNoTasks(t *testing.T) {
 		t.Errorf("expected 'No tasks available', got: %s", stdout.String())
 	}
 }
+
+func TestCreateCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "create", "My new task"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "My new task") {
+		t.Errorf("expected task title in output, got: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "medium") {
+		t.Error("expected default priority 'medium'")
+	}
+}
+
+func TestCreateCommandWithFlags(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "create", "Bug fix", "-p", "high", "-t", "bug", "-d", "Fix the login"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "high") {
+		t.Error("expected priority 'high'")
+	}
+	if !strings.Contains(stdout.String(), "bug") {
+		t.Error("expected type 'bug'")
+	}
+}

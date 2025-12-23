@@ -61,6 +61,21 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	nextCmd.Bool(&nextJSON, "j", "json", "Output as JSON")
 	flaggy.AttachSubcommand(nextCmd, 1)
 
+	// Create subcommand
+	createCmd := flaggy.NewSubcommand("create")
+	createCmd.Description = "Create a new task"
+	var createTitle string
+	var createPriority = "medium"
+	var createType = "feature"
+	var createDesc string
+	var createJSON bool
+	createCmd.AddPositionalValue(&createTitle, "title", 1, true, "Task title")
+	createCmd.String(&createPriority, "p", "priority", "Priority (default: medium)")
+	createCmd.String(&createType, "t", "type", "Type (default: feature)")
+	createCmd.String(&createDesc, "d", "description", "Task description")
+	createCmd.Bool(&createJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(createCmd, 1)
+
 	// Parse with custom args
 	flaggy.ParseArgs(args[1:])
 
@@ -85,6 +100,10 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 
 	if nextCmd.Used {
 		return cmdNext(stdout, stderr, nextJSON)
+	}
+
+	if createCmd.Used {
+		return cmdCreate(stdout, stderr, createJSON, createTitle, createPriority, createType, createDesc)
 	}
 
 	return 0
