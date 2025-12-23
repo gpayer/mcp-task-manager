@@ -142,3 +142,24 @@ func TestCreateCommandWithFlags(t *testing.T) {
 		t.Error("expected type 'bug'")
 	}
 }
+
+func TestUpdateCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// First create a task
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Original title"}, &stdout, &stderr)
+
+	// Then update it
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "update", "1", "--title", "Updated title"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Updated title") {
+		t.Errorf("expected updated title in output, got: %s", stdout.String())
+	}
+}

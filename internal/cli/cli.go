@@ -76,6 +76,21 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	createCmd.Bool(&createJSON, "j", "json", "Output as JSON")
 	flaggy.AttachSubcommand(createCmd, 1)
 
+	// Update subcommand
+	updateCmd := flaggy.NewSubcommand("update")
+	updateCmd.Description = "Update an existing task"
+	var updateIDStr string
+	var updateTitle, updateStatus, updatePriority, updateType, updateDesc string
+	var updateJSON bool
+	updateCmd.AddPositionalValue(&updateIDStr, "id", 1, true, "Task ID")
+	updateCmd.String(&updateTitle, "", "title", "New title")
+	updateCmd.String(&updateStatus, "s", "status", "New status")
+	updateCmd.String(&updatePriority, "p", "priority", "New priority")
+	updateCmd.String(&updateType, "t", "type", "New type")
+	updateCmd.String(&updateDesc, "d", "description", "New description")
+	updateCmd.Bool(&updateJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(updateCmd, 1)
+
 	// Parse with custom args
 	flaggy.ParseArgs(args[1:])
 
@@ -104,6 +119,15 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 
 	if createCmd.Used {
 		return cmdCreate(stdout, stderr, createJSON, createTitle, createPriority, createType, createDesc)
+	}
+
+	if updateCmd.Used {
+		updateID, err := strconv.Atoi(updateIDStr)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: invalid task ID: %s\n", updateIDStr)
+			return 1
+		}
+		return cmdUpdate(stdout, stderr, updateJSON, updateID, updateTitle, updateStatus, updatePriority, updateType, updateDesc)
 	}
 
 	return 0

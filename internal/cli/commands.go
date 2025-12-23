@@ -151,3 +151,51 @@ func cmdCreate(stdout, stderr io.Writer, jsonOutput bool, title, priority, taskT
 
 	return 0
 }
+
+// cmdUpdate handles the update command
+func cmdUpdate(stdout, stderr io.Writer, jsonOutput bool, id int, title, status, priority, taskType, description string) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	var titlePtr, descPtr, typePtr *string
+	var statusPtr *task.Status
+	var priorityPtr *task.Priority
+
+	if title != "" {
+		titlePtr = &title
+	}
+	if description != "" {
+		descPtr = &description
+	}
+	if status != "" {
+		s := task.Status(status)
+		statusPtr = &s
+	}
+	if priority != "" {
+		p := task.Priority(priority)
+		priorityPtr = &p
+	}
+	if taskType != "" {
+		typePtr = &taskType
+	}
+
+	t, err := svc.Update(id, titlePtr, descPtr, statusPtr, priorityPtr, typePtr)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if jsonOutput {
+		if err := FormatJSON(stdout, t); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprint(stdout, FormatTaskDetail(t))
+	}
+
+	return 0
+}
