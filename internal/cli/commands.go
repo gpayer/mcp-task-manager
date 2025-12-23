@@ -199,3 +199,29 @@ func cmdUpdate(stdout, stderr io.Writer, jsonOutput bool, id int, title, status,
 
 	return 0
 }
+
+// cmdDelete handles the delete command
+func cmdDelete(stdout, stderr io.Writer, jsonOutput bool, id int) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if err := svc.Delete(id); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	msg := fmt.Sprintf("Task #%d deleted.", id)
+	if jsonOutput {
+		if err := FormatJSONMessage(stdout, msg, id); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintln(stdout, msg)
+	}
+
+	return 0
+}

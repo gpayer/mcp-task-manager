@@ -163,3 +163,32 @@ func TestUpdateCommand(t *testing.T) {
 		t.Errorf("expected updated title in output, got: %s", stdout.String())
 	}
 }
+
+func TestDeleteCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create a task first
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "To be deleted"}, &stdout, &stderr)
+
+	// Delete it
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "delete", "1"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "deleted") {
+		t.Errorf("expected 'deleted' message, got: %s", stdout.String())
+	}
+
+	// Verify it's gone
+	stdout.Reset()
+	stderr.Reset()
+	code = RunWithArgs([]string{"mcp-task-manager", "get", "1"}, &stdout, &stderr)
+	if code != 1 {
+		t.Error("expected task to be deleted")
+	}
+}

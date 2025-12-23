@@ -91,6 +91,15 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	updateCmd.Bool(&updateJSON, "j", "json", "Output as JSON")
 	flaggy.AttachSubcommand(updateCmd, 1)
 
+	// Delete subcommand
+	deleteCmd := flaggy.NewSubcommand("delete")
+	deleteCmd.Description = "Delete a task"
+	var deleteIDStr string
+	var deleteJSON bool
+	deleteCmd.AddPositionalValue(&deleteIDStr, "id", 1, true, "Task ID")
+	deleteCmd.Bool(&deleteJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(deleteCmd, 1)
+
 	// Parse with custom args
 	flaggy.ParseArgs(args[1:])
 
@@ -128,6 +137,15 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return cmdUpdate(stdout, stderr, updateJSON, updateID, updateTitle, updateStatus, updatePriority, updateType, updateDesc)
+	}
+
+	if deleteCmd.Used {
+		deleteID, err := strconv.Atoi(deleteIDStr)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: invalid task ID: %s\n", deleteIDStr)
+			return 1
+		}
+		return cmdDelete(stdout, stderr, deleteJSON, deleteID)
 	}
 
 	return 0
