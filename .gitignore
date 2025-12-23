@@ -1,6 +1,9 @@
 # Binary
 mcp-task-manager
 
+# go
+coverage.out
+
 # Task data (generated at runtime)
 tasks/.index.json
 

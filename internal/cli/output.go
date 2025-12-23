@@ -52,7 +52,7 @@ func FormatMessage(msg string, id int) string {
 }
 
 // FormatJSON writes a value as JSON to the writer
-func FormatJSON(w io.Writer, v interface{}) error {
+func FormatJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
@@ -60,7 +60,7 @@ func FormatJSON(w io.Writer, v interface{}) error {
 
 // FormatJSONMessage writes a message with ID as JSON
 func FormatJSONMessage(w io.Writer, msg string, id int) error {
-	return FormatJSON(w, map[string]interface{}{
+	return FormatJSON(w, map[string]any{
 		"message": msg,
 		"id":      id,
 	})
