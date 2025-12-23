@@ -225,3 +225,55 @@ func cmdDelete(stdout, stderr io.Writer, jsonOutput bool, id int) int {
 
 	return 0
 }
+
+// cmdStart handles the start command
+func cmdStart(stdout, stderr io.Writer, jsonOutput bool, id int) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if _, err := svc.StartTask(id); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	msg := fmt.Sprintf("Task #%d started.", id)
+	if jsonOutput {
+		if err := FormatJSONMessage(stdout, msg, id); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintln(stdout, msg)
+	}
+
+	return 0
+}
+
+// cmdComplete handles the complete command
+func cmdComplete(stdout, stderr io.Writer, jsonOutput bool, id int) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if _, err := svc.CompleteTask(id); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	msg := fmt.Sprintf("Task #%d completed.", id)
+	if jsonOutput {
+		if err := FormatJSONMessage(stdout, msg, id); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintln(stdout, msg)
+	}
+
+	return 0
+}

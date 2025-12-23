@@ -100,6 +100,24 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	deleteCmd.Bool(&deleteJSON, "j", "json", "Output as JSON")
 	flaggy.AttachSubcommand(deleteCmd, 1)
 
+	// Start subcommand
+	startCmd := flaggy.NewSubcommand("start")
+	startCmd.Description = "Start a task (todo -> in_progress)"
+	var startIDStr string
+	var startJSON bool
+	startCmd.AddPositionalValue(&startIDStr, "id", 1, true, "Task ID")
+	startCmd.Bool(&startJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(startCmd, 1)
+
+	// Complete subcommand
+	completeCmd := flaggy.NewSubcommand("complete")
+	completeCmd.Description = "Complete a task (in_progress -> done)"
+	var completeIDStr string
+	var completeJSON bool
+	completeCmd.AddPositionalValue(&completeIDStr, "id", 1, true, "Task ID")
+	completeCmd.Bool(&completeJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(completeCmd, 1)
+
 	// Parse with custom args
 	flaggy.ParseArgs(args[1:])
 
@@ -146,6 +164,24 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return cmdDelete(stdout, stderr, deleteJSON, deleteID)
+	}
+
+	if startCmd.Used {
+		startID, err := strconv.Atoi(startIDStr)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: invalid task ID: %s\n", startIDStr)
+			return 1
+		}
+		return cmdStart(stdout, stderr, startJSON, startID)
+	}
+
+	if completeCmd.Used {
+		completeID, err := strconv.Atoi(completeIDStr)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: invalid task ID: %s\n", completeIDStr)
+			return 1
+		}
+		return cmdComplete(stdout, stderr, completeJSON, completeID)
 	}
 
 	return 0

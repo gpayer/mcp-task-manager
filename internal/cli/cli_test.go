@@ -192,3 +192,46 @@ func TestDeleteCommand(t *testing.T) {
 		t.Error("expected task to be deleted")
 	}
 }
+
+func TestStartCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create a task
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Task to start"}, &stdout, &stderr)
+
+	// Start it
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "start", "1"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "started") {
+		t.Errorf("expected 'started' message, got: %s", stdout.String())
+	}
+}
+
+func TestCompleteCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create and start a task
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Task to complete"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "start", "1"}, &stdout, &stderr)
+
+	// Complete it
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "complete", "1"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "completed") {
+		t.Errorf("expected 'completed' message, got: %s", stdout.String())
+	}
+}
