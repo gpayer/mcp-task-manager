@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/integrii/flaggy"
 )
@@ -44,6 +45,22 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	listCmd.Bool(&listJSON, "j", "json", "Output as JSON")
 	flaggy.AttachSubcommand(listCmd, 1)
 
+	// Get subcommand
+	getCmd := flaggy.NewSubcommand("get")
+	getCmd.Description = "Get task details by ID"
+	var getIDStr string
+	var getJSON bool
+	getCmd.AddPositionalValue(&getIDStr, "id", 1, true, "Task ID")
+	getCmd.Bool(&getJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(getCmd, 1)
+
+	// Next subcommand
+	nextCmd := flaggy.NewSubcommand("next")
+	nextCmd.Description = "Get highest priority todo task"
+	var nextJSON bool
+	nextCmd.Bool(&nextJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(nextCmd, 1)
+
 	// Parse with custom args
 	flaggy.ParseArgs(args[1:])
 
@@ -55,6 +72,19 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 
 	if listCmd.Used {
 		return cmdList(stdout, stderr, listJSON, listStatus, listPriority, listType)
+	}
+
+	if getCmd.Used {
+		getID, err := strconv.Atoi(getIDStr)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: invalid task ID: %v\n", err)
+			return 1
+		}
+		return cmdGet(stdout, stderr, getJSON, getID)
+	}
+
+	if nextCmd.Used {
+		return cmdNext(stdout, stderr, nextJSON)
 	}
 
 	return 0

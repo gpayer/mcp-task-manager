@@ -69,3 +69,59 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 
 	return 0
 }
+
+// cmdGet handles the get command
+func cmdGet(stdout, stderr io.Writer, jsonOutput bool, id int) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	t, err := svc.Get(id)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if jsonOutput {
+		if err := FormatJSON(stdout, t); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprint(stdout, FormatTaskDetail(t))
+	}
+
+	return 0
+}
+
+// cmdNext handles the next command
+func cmdNext(stdout, stderr io.Writer, jsonOutput bool) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	t := svc.GetNextTask()
+	if t == nil {
+		if jsonOutput {
+			FormatJSON(stdout, map[string]string{"message": "No tasks available"})
+		} else {
+			fmt.Fprintln(stdout, "No tasks available.")
+		}
+		return 0
+	}
+
+	if jsonOutput {
+		if err := FormatJSON(stdout, t); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprint(stdout, FormatTaskDetail(t))
+	}
+
+	return 0
+}

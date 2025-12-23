@@ -76,3 +76,33 @@ func TestListCommandJSON(t *testing.T) {
 		t.Errorf("expected JSON array output, got: %s", output)
 	}
 }
+
+func TestGetCommandNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "get", "999"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Errorf("expected exit code 1 for not found, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "not found") {
+		t.Errorf("expected 'not found' error, got: %s", stderr.String())
+	}
+}
+
+func TestNextCommandNoTasks(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "next"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "No tasks available") {
+		t.Errorf("expected 'No tasks available', got: %s", stdout.String())
+	}
+}
