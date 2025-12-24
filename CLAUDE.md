@@ -1,6 +1,6 @@
 # MCP Task Manager
 
-A Go-based MCP server for task management, designed for Claude and coding agents.
+A Go-based MCP server for task management, designed for Claude and coding agents. Also works as a standalone CLI tool.
 
 **Module path:** `github.com/gpayer/mcp-task-manager`
 
@@ -8,11 +8,12 @@ A Go-based MCP server for task management, designed for Claude and coding agents
 
 ```
 ┌─────────────────────────────────────────────┐
-│              MCP Server (stdio)             │
-├─────────────────────────────────────────────┤
-│                 Tool Handlers               │
-│  (create, update, list, get_next_task...)   │
-├─────────────────────────────────────────────┤
+│         Entry Point (main.go)               │
+│   (CLI mode if args, MCP server otherwise)  │
+├──────────────────────┬──────────────────────┤
+│    CLI Commands      │   MCP Tool Handlers  │
+│  (list, get, create) │  (create_task, etc.) │
+├──────────────────────┴──────────────────────┤
 │               Task Service                  │
 │    (business logic, validation, sorting)    │
 ├─────────────────────────────────────────────┤
@@ -116,6 +117,7 @@ Override data directory: `MCP_TASKS_DIR=/path/to/tasks`
 
 - **MCP SDK:** `github.com/mark3labs/mcp-go` - Third-party Go MCP implementation
 - **YAML parsing:** `gopkg.in/yaml.v3` - For frontmatter and config
+- **CLI parsing:** `github.com/integrii/flaggy` - Lightweight CLI argument parser
 
 ## Project Structure
 
@@ -123,8 +125,14 @@ Override data directory: `MCP_TASKS_DIR=/path/to/tasks`
 mcp-task-manager/
 ├── cmd/
 │   └── mcp-task-manager/
-│       └── main.go              # Entry point, MCP server setup
+│       └── main.go              # Entry point (CLI if args, MCP server otherwise)
 ├── internal/
+│   ├── cli/
+│   │   ├── cli.go               # CLI entry point and subcommand setup
+│   │   ├── cli_test.go          # CLI tests
+│   │   ├── commands.go          # Command handlers (list, get, create, etc.)
+│   │   ├── output.go            # Output formatters (table, JSON)
+│   │   └── output_test.go       # Output formatter tests
 │   ├── config/
 │   │   └── config.go            # Config loading (file + env)
 │   ├── storage/
