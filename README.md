@@ -38,6 +38,55 @@ The MCP server communicates via stdio:
 ./mcp-task-manager
 ```
 
+### CLI Usage
+
+The same binary also works as a standalone CLI tool when called with arguments:
+
+```bash
+# List all tasks
+./mcp-task-manager list
+./mcp-task-manager list --status=todo --priority=high
+./mcp-task-manager list --json
+
+# Get task details
+./mcp-task-manager get 1
+./mcp-task-manager get 1 --json
+
+# Create a task
+./mcp-task-manager create "Fix login bug" -p high -t bug -d "Users can't log in"
+
+# Update a task
+./mcp-task-manager update 1 --title "New title" -s in_progress
+
+# Delete a task
+./mcp-task-manager delete 1
+
+# Workflow commands
+./mcp-task-manager next              # Get highest priority todo task
+./mcp-task-manager start 1           # Start a task (todo -> in_progress)
+./mcp-task-manager complete 1        # Complete a task (in_progress -> done)
+
+# Other
+./mcp-task-manager version
+./mcp-task-manager --help
+```
+
+#### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `list` | List tasks with optional filters (`-s status`, `-p priority`, `-t type`) |
+| `get <id>` | Get task details by ID |
+| `create <title>` | Create task (defaults: priority=medium, type=feature) |
+| `update <id>` | Update task fields |
+| `delete <id>` | Delete a task |
+| `next` | Get highest priority todo task |
+| `start <id>` | Move task to in_progress |
+| `complete <id>` | Move task to done |
+| `version` | Show version |
+
+All commands support `--json` / `-j` for JSON output.
+
 ### Claude Desktop Integration
 
 Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json` on Linux, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
@@ -131,8 +180,9 @@ Detailed description in Markdown format.
 
 ```
 mcp-task-manager/
-├── cmd/mcp-task-manager/    # Entry point
+├── cmd/mcp-task-manager/    # Entry point (MCP server + CLI)
 ├── internal/
+│   ├── cli/                 # CLI command handlers
 │   ├── config/              # Configuration loading
 │   ├── storage/             # Markdown + index storage
 │   ├── task/                # Task model and service
