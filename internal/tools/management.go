@@ -108,7 +108,7 @@ func createTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 		priority := task.Priority(req.GetString("priority", ""))
 		taskType := req.GetString("type", "")
 
-		t, err := svc.Create(title, description, priority, taskType)
+		t, err := svc.Create(title, description, priority, taskType, nil)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

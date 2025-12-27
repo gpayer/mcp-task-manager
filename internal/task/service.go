@@ -54,8 +54,8 @@ func (s *Service) Initialize() error {
 	return s.index.Load()
 }
 
-// Create creates a new task
-func (s *Service) Create(title, description string, priority Priority, taskType string) (*Task, error) {
+// Create creates a new task (optionally as a subtask)
+func (s *Service) Create(title, description string, priority Priority, taskType string, parentID *int) (*Task, error) {
 	if title == "" {
 		return nil, fmt.Errorf("title is required")
 	}
@@ -66,9 +66,21 @@ func (s *Service) Create(title, description string, priority Priority, taskType 
 		return nil, fmt.Errorf("invalid task type: %s", taskType)
 	}
 
+	// Validate parent if provided
+	if parentID != nil {
+		parent, ok := s.index.Get(*parentID)
+		if !ok {
+			return nil, fmt.Errorf("parent task not found: %d", *parentID)
+		}
+		if parent.ParentID != nil {
+			return nil, fmt.Errorf("cannot create subtask under a subtask (single level only)")
+		}
+	}
+
 	now := time.Now().UTC()
 	t := &Task{
 		ID:          s.index.NextID(),
+		ParentID:    parentID,
 		Title:       title,
 		Description: description,
 		Status:      StatusTodo,
@@ -88,6 +100,11 @@ func (s *Service) Create(title, description string, priority Priority, taskType 
 	}
 
 	return t, nil
+}
+
+// CreateSubtask creates a subtask under a parent
+func (s *Service) CreateSubtask(title, description string, priority Priority, taskType string, parentID int) (*Task, error) {
+	return s.Create(title, description, priority, taskType, &parentID)
 }
 
 // Get returns a task by ID

@@ -134,7 +134,7 @@ func cmdCreate(stdout, stderr io.Writer, jsonOutput bool, title, priority, taskT
 		return 1
 	}
 
-	t, err := svc.Create(title, description, task.Priority(priority), taskType)
+	t, err := svc.Create(title, description, task.Priority(priority), taskType, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1

@@ -141,7 +141,7 @@ func TestService_Create(t *testing.T) {
 		t.Fatalf("Initialize() error = %v", err)
 	}
 
-	task, err := svc.Create("Test Task", "Description", PriorityHigh, "feature")
+	task, err := svc.Create("Test Task", "Description", PriorityHigh, "feature", nil)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -176,7 +176,7 @@ func TestService_Create_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := svc.Create(tt.title, "desc", tt.priority, tt.taskType)
+			_, err := svc.Create(tt.title, "desc", tt.priority, tt.taskType, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Create() error = %v, wantErr = %v", err, tt.wantErr)
 			}
@@ -188,7 +188,7 @@ func TestService_Update(t *testing.T) {
 	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
 	svc.Initialize()
 
-	task, _ := svc.Create("Original", "Desc", PriorityMedium, "feature")
+	task, _ := svc.Create("Original", "Desc", PriorityMedium, "feature", nil)
 
 	newTitle := "Updated"
 	newStatus := StatusInProgress
@@ -209,7 +209,7 @@ func TestService_Delete(t *testing.T) {
 	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
 	svc.Initialize()
 
-	task, _ := svc.Create("To Delete", "Desc", PriorityMedium, "feature")
+	task, _ := svc.Create("To Delete", "Desc", PriorityMedium, "feature", nil)
 
 	if err := svc.Delete(task.ID); err != nil {
 		t.Fatalf("Delete() error = %v", err)
@@ -225,7 +225,7 @@ func TestService_TaskWorkflow(t *testing.T) {
 	svc.Initialize()
 
 	// Create
-	task, _ := svc.Create("Workflow Test", "Desc", PriorityHigh, "feature")
+	task, _ := svc.Create("Workflow Test", "Desc", PriorityHigh, "feature", nil)
 	if task.Status != StatusTodo {
 		t.Fatalf("initial status = %q, want todo", task.Status)
 	}
@@ -253,7 +253,7 @@ func TestService_StartTask_InvalidState(t *testing.T) {
 	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
 	svc.Initialize()
 
-	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature")
+	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature", nil)
 
 	// Start the task
 	svc.StartTask(task.ID)
@@ -269,7 +269,7 @@ func TestService_CompleteTask_InvalidState(t *testing.T) {
 	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
 	svc.Initialize()
 
-	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature")
+	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature", nil)
 
 	// Try to complete without starting - should fail
 	_, err := svc.CompleteTask(task.ID)
@@ -288,9 +288,9 @@ func TestService_GetNextTask(t *testing.T) {
 	}
 
 	// Add tasks with different priorities
-	svc.Create("Low", "Desc", PriorityLow, "feature")
+	svc.Create("Low", "Desc", PriorityLow, "feature", nil)
 	time.Sleep(time.Millisecond) // Ensure different timestamps
-	svc.Create("Critical", "Desc", PriorityCritical, "bug")
+	svc.Create("Critical", "Desc", PriorityCritical, "bug", nil)
 
 	next := svc.GetNextTask()
 	if next == nil {
@@ -305,9 +305,9 @@ func TestService_List(t *testing.T) {
 	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
 	svc.Initialize()
 
-	svc.Create("Task 1", "Desc", PriorityHigh, "feature")
-	svc.Create("Task 2", "Desc", PriorityLow, "bug")
-	svc.Create("Task 3", "Desc", PriorityMedium, "feature")
+	svc.Create("Task 1", "Desc", PriorityHigh, "feature", nil)
+	svc.Create("Task 2", "Desc", PriorityLow, "bug", nil)
+	svc.Create("Task 3", "Desc", PriorityMedium, "feature", nil)
 
 	// All
 	all := svc.List(nil, nil, nil)
@@ -320,5 +320,48 @@ func TestService_List(t *testing.T) {
 	features := svc.List(nil, nil, &featureType)
 	if len(features) != 2 {
 		t.Errorf("List() by feature = %d, want 2", len(features))
+	}
+}
+
+func TestService_CreateSubtask(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	// Create parent
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+
+	// Create subtask
+	subtask, err := svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+	if err != nil {
+		t.Fatalf("CreateSubtask() error = %v", err)
+	}
+
+	if subtask.ParentID == nil || *subtask.ParentID != parent.ID {
+		t.Errorf("ParentID = %v, want %d", subtask.ParentID, parent.ID)
+	}
+}
+
+func TestService_CreateSubtask_InvalidParent(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	// Try to create subtask with non-existent parent
+	_, err := svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", 999)
+	if err == nil {
+		t.Error("CreateSubtask() with invalid parent should fail")
+	}
+}
+
+func TestService_CreateSubtask_NestedSubtask(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	subtask, _ := svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Try to create subtask under subtask (should fail - single level only)
+	_, err := svc.CreateSubtask("Nested", "Desc", PriorityLow, "feature", subtask.ID)
+	if err == nil {
+		t.Error("CreateSubtask() under subtask should fail")
 	}
 }
