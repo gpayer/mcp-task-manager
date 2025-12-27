@@ -116,6 +116,16 @@ func (s *Service) Get(id int) (*Task, error) {
 	return t, nil
 }
 
+// GetWithSubtasks returns a task and its subtasks in one call
+func (s *Service) GetWithSubtasks(id int) (*Task, []*Task, error) {
+	t, err := s.Get(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	subtasks := s.index.GetSubtasks(id)
+	return t, subtasks, nil
+}
+
 // Update modifies a task
 func (s *Service) Update(id int, title, description *string, status *Status, priority *Priority, taskType *string) (*Task, error) {
 	t, err := s.Get(id)

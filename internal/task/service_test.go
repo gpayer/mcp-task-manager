@@ -507,3 +507,67 @@ func TestService_Delete_SubtaskAllowed(t *testing.T) {
 		t.Fatalf("Delete(subtask) error = %v", err)
 	}
 }
+
+func TestService_GetWithSubtasks(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	// Create parent with subtasks
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	sub1, _ := svc.CreateSubtask("Sub 1", "Desc", PriorityMedium, "feature", parent.ID)
+	sub2, _ := svc.CreateSubtask("Sub 2", "Desc", PriorityLow, "feature", parent.ID)
+
+	// Get with subtasks
+	task, subtasks, err := svc.GetWithSubtasks(parent.ID)
+	if err != nil {
+		t.Fatalf("GetWithSubtasks() error = %v", err)
+	}
+
+	if task.ID != parent.ID {
+		t.Errorf("task.ID = %d, want %d", task.ID, parent.ID)
+	}
+	if len(subtasks) != 2 {
+		t.Errorf("len(subtasks) = %d, want 2", len(subtasks))
+	}
+
+	// Verify subtask IDs are correct
+	subtaskIDs := make(map[int]bool)
+	for _, s := range subtasks {
+		subtaskIDs[s.ID] = true
+	}
+	if !subtaskIDs[sub1.ID] || !subtaskIDs[sub2.ID] {
+		t.Errorf("subtasks should contain IDs %d and %d", sub1.ID, sub2.ID)
+	}
+}
+
+func TestService_GetWithSubtasks_NoSubtasks(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	// Create task without subtasks
+	task, _ := svc.Create("Standalone", "Desc", PriorityHigh, "feature", nil)
+
+	// Get with subtasks - should return empty slice
+	got, subtasks, err := svc.GetWithSubtasks(task.ID)
+	if err != nil {
+		t.Fatalf("GetWithSubtasks() error = %v", err)
+	}
+
+	if got.ID != task.ID {
+		t.Errorf("task.ID = %d, want %d", got.ID, task.ID)
+	}
+	if len(subtasks) != 0 {
+		t.Errorf("len(subtasks) = %d, want 0", len(subtasks))
+	}
+}
+
+func TestService_GetWithSubtasks_NotFound(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	// Get non-existent task
+	_, _, err := svc.GetWithSubtasks(999)
+	if err == nil {
+		t.Error("GetWithSubtasks() on non-existent task should fail")
+	}
+}
