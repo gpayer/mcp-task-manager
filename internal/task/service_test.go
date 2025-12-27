@@ -104,6 +104,37 @@ func (m *mockIndex) NextID() int {
 	return m.nextID
 }
 
+func (m *mockIndex) GetSubtasks(parentID int) []*Task {
+	var result []*Task
+	for _, t := range m.tasks {
+		if t.ParentID != nil && *t.ParentID == parentID {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+func (m *mockIndex) HasSubtasks(taskID int) bool {
+	for _, t := range m.tasks {
+		if t.ParentID != nil && *t.ParentID == taskID {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *mockIndex) SubtaskCounts(parentID int) (total int, done int) {
+	for _, t := range m.tasks {
+		if t.ParentID != nil && *t.ParentID == parentID {
+			total++
+			if t.Status == StatusDone {
+				done++
+			}
+		}
+	}
+	return
+}
+
 func TestService_Create(t *testing.T) {
 	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
 	if err := svc.Initialize(); err != nil {

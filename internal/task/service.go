@@ -24,6 +24,10 @@ type Index interface {
 	Filter(status *Status, priority *Priority, taskType *string) []*Task
 	NextTodo() *Task
 	NextID() int
+	// Subtask methods
+	GetSubtasks(parentID int) []*Task
+	HasSubtasks(taskID int) bool
+	SubtaskCounts(parentID int) (total int, done int)
 }
 
 // Service provides task management operations
