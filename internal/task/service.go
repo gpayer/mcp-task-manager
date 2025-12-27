@@ -126,6 +126,11 @@ func (s *Service) GetWithSubtasks(id int) (*Task, []*Task, error) {
 	return t, subtasks, nil
 }
 
+// GetSubtaskCounts returns the count of subtasks for a task
+func (s *Service) GetSubtaskCounts(taskID int) (total, done int) {
+	return s.index.SubtaskCounts(taskID)
+}
+
 // Update modifies a task
 func (s *Service) Update(id int, title, description *string, status *Status, priority *Priority, taskType *string) (*Task, error) {
 	t, err := s.Get(id)
@@ -186,7 +191,7 @@ func (s *Service) Delete(id int, deleteSubtasks bool) error {
 	if s.index.HasSubtasks(id) {
 		if !deleteSubtasks {
 			total, _ := s.index.SubtaskCounts(id)
-			return fmt.Errorf("cannot delete task %d: has %d subtask(s). Use delete_subtasks to force", id, total)
+			return fmt.Errorf("cannot delete task %d: has %d subtask(s). Use --force to delete this tasks and its subtasks", id, total)
 		}
 
 		// Delete all subtasks first

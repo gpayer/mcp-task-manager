@@ -58,6 +58,15 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 	parentPtr := &parentID
 	tasks := svc.List(statusPtr, priorityPtr, typePtr, parentPtr)
 
+	// Build subtask counts for each task
+	subtaskCounts := make(map[int]SubtaskCounts)
+	for _, t := range tasks {
+		total, done := svc.GetSubtaskCounts(t.ID)
+		if total > 0 {
+			subtaskCounts[t.ID] = SubtaskCounts{Total: total, Done: done}
+		}
+	}
+
 	if jsonOutput {
 		// Ensure we always output a JSON array, even if empty
 		if tasks == nil {
@@ -68,7 +77,7 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 			return 1
 		}
 	} else {
-		fmt.Fprint(stdout, FormatTaskTable(tasks))
+		fmt.Fprint(stdout, FormatTaskTable(tasks, subtaskCounts))
 	}
 
 	return 0
@@ -82,19 +91,28 @@ func cmdGet(stdout, stderr io.Writer, jsonOutput bool, id int) int {
 		return 1
 	}
 
-	t, err := svc.Get(id)
+	t, subtasks, err := svc.GetWithSubtasks(id)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
 
 	if jsonOutput {
-		if err := FormatJSON(stdout, t); err != nil {
+		// Include subtasks in JSON output
+		type taskWithSubtasks struct {
+			*task.Task
+			Subtasks []*task.Task `json:"subtasks,omitempty"`
+		}
+		output := taskWithSubtasks{Task: t}
+		if len(subtasks) > 0 {
+			output.Subtasks = subtasks
+		}
+		if err := FormatJSON(stdout, output); err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 1
 		}
 	} else {
-		fmt.Fprint(stdout, FormatTaskDetail(t))
+		fmt.Fprint(stdout, FormatTaskDetail(t, subtasks))
 	}
 
 	return 0
@@ -124,7 +142,7 @@ func cmdNext(stdout, stderr io.Writer, jsonOutput bool) int {
 			return 1
 		}
 	} else {
-		fmt.Fprint(stdout, FormatTaskDetail(t))
+		fmt.Fprint(stdout, FormatTaskDetail(t, nil))
 	}
 
 	return 0
@@ -155,7 +173,7 @@ func cmdCreate(stdout, stderr io.Writer, jsonOutput bool, title, priority, taskT
 			return 1
 		}
 	} else {
-		fmt.Fprint(stdout, FormatTaskDetail(t))
+		fmt.Fprint(stdout, FormatTaskDetail(t, nil))
 	}
 
 	return 0
@@ -203,7 +221,7 @@ func cmdUpdate(stdout, stderr io.Writer, jsonOutput bool, id int, title, status,
 			return 1
 		}
 	} else {
-		fmt.Fprint(stdout, FormatTaskDetail(t))
+		fmt.Fprint(stdout, FormatTaskDetail(t, nil))
 	}
 
 	return 0

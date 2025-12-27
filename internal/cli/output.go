@@ -11,52 +11,43 @@ import (
 )
 
 // FormatTaskDetail formats a single task for human-readable output
-func FormatTaskDetail(t *task.Task) string {
+// subtasks is optional and will be displayed if provided
+func FormatTaskDetail(t *task.Task, subtasks []*task.Task) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Task #%d\n", t.ID))
 	sb.WriteString(fmt.Sprintf("Title:       %s\n", t.Title))
 	sb.WriteString(fmt.Sprintf("Status:      %s\n", t.Status))
 	sb.WriteString(fmt.Sprintf("Priority:    %s\n", t.Priority))
 	sb.WriteString(fmt.Sprintf("Type:        %s\n", t.Type))
+	if t.ParentID != nil {
+		sb.WriteString(fmt.Sprintf("Parent:      #%d\n", *t.ParentID))
+	}
 	sb.WriteString(fmt.Sprintf("Created:     %s\n", t.CreatedAt.Format("2006-01-02 15:04:05")))
 	sb.WriteString(fmt.Sprintf("Updated:     %s\n", t.UpdatedAt.Format("2006-01-02 15:04:05")))
 	if t.Description != "" {
 		sb.WriteString(fmt.Sprintf("\nDescription:\n%s\n", t.Description))
 	}
+	if len(subtasks) > 0 {
+		sb.WriteString(fmt.Sprintf("\nSubtasks (%d):\n", len(subtasks)))
+		for _, sub := range subtasks {
+			sb.WriteString(fmt.Sprintf("  #%d [%s] %s\n", sub.ID, sub.Status, sub.Title))
+		}
+	}
 	return sb.String()
 }
 
-// subtaskCounts holds the count of subtasks for a parent task
-type subtaskCounts struct {
-	total int
-	done  int
-}
-
-// computeSubtaskCounts builds a map of parent ID to subtask counts from a task slice
-func computeSubtaskCounts(tasks []*task.Task) map[int]subtaskCounts {
-	counts := make(map[int]subtaskCounts)
-	for _, t := range tasks {
-		if t.ParentID != nil {
-			parentID := *t.ParentID
-			c := counts[parentID]
-			c.total++
-			if t.Status == task.StatusDone {
-				c.done++
-			}
-			counts[parentID] = c
-		}
-	}
-	return counts
+// SubtaskCounts holds the count of subtasks for a parent task
+type SubtaskCounts struct {
+	Total int
+	Done  int
 }
 
 // FormatTaskTable formats a list of tasks as a table
-func FormatTaskTable(tasks []*task.Task) string {
+// subtaskCounts is a map of task ID to subtask counts (can be nil)
+func FormatTaskTable(tasks []*task.Task, subtaskCounts map[int]SubtaskCounts) string {
 	if len(tasks) == 0 {
 		return "No tasks found."
 	}
-
-	// Compute subtask counts for parent tasks
-	subtaskMap := computeSubtaskCounts(tasks)
 
 	var sb strings.Builder
 	w := tabwriter.NewWriter(&sb, 0, 0, 3, ' ', 0)
@@ -68,8 +59,10 @@ func FormatTaskTable(tasks []*task.Task) string {
 		}
 		// Show subtask count if this task has subtasks
 		subtaskStr := ""
-		if counts, ok := subtaskMap[t.ID]; ok {
-			subtaskStr = fmt.Sprintf("[%d/%d]", counts.done, counts.total)
+		if subtaskCounts != nil {
+			if counts, ok := subtaskCounts[t.ID]; ok && counts.Total > 0 {
+				subtaskStr = fmt.Sprintf("[%d/%d]", counts.Done, counts.Total)
+			}
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n", t.ID, title, t.Status, t.Priority, t.Type, subtaskStr)
 	}
