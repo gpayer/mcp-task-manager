@@ -313,6 +313,68 @@ func TestIndex_SaveAndLoad(t *testing.T) {
 	}
 }
 
+func TestMarkdownStorage_SaveLoad_WithParentID(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+
+	parentID := 1
+	tsk := &task.Task{
+		ID:        2,
+		ParentID:  &parentID,
+		Title:     "Subtask",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityHigh,
+		Type:      "feature",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	if err := storage.Save(tsk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := storage.Load(2)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if loaded.ParentID == nil {
+		t.Fatal("ParentID should not be nil")
+	}
+	if *loaded.ParentID != 1 {
+		t.Errorf("ParentID = %d, want 1", *loaded.ParentID)
+	}
+}
+
+func TestMarkdownStorage_SaveLoad_WithoutParentID(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+
+	tsk := &task.Task{
+		ID:        1,
+		ParentID:  nil,
+		Title:     "Top-level task",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityHigh,
+		Type:      "feature",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	if err := storage.Save(tsk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := storage.Load(1)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if loaded.ParentID != nil {
+		t.Error("ParentID should be nil for top-level task")
+	}
+}
+
 func TestIndex_RebuildFromFiles(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewMarkdownStorage(dir)
