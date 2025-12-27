@@ -200,6 +200,20 @@ func (s *Service) StartTask(id int) (*Task, error) {
 		return nil, fmt.Errorf("task %d is not in todo status (current: %s)", id, t.Status)
 	}
 
+	// Auto-start parent if this is a subtask
+	if t.ParentID != nil {
+		parent, err := s.Get(*t.ParentID)
+		if err != nil {
+			return nil, fmt.Errorf("parent task not found: %d", *t.ParentID)
+		}
+		if parent.Status == StatusTodo {
+			status := StatusInProgress
+			if _, err := s.Update(*t.ParentID, nil, nil, &status, nil, nil); err != nil {
+				return nil, fmt.Errorf("failed to start parent task: %w", err)
+			}
+		}
+	}
+
 	status := StatusInProgress
 	return s.Update(id, nil, nil, &status, nil, nil)
 }

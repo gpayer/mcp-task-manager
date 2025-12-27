@@ -365,3 +365,38 @@ func TestService_CreateSubtask_NestedSubtask(t *testing.T) {
 		t.Error("CreateSubtask() under subtask should fail")
 	}
 }
+
+func TestService_StartTask_AutoStartsParent(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	subtask, _ := svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Start subtask
+	_, err := svc.StartTask(subtask.ID)
+	if err != nil {
+		t.Fatalf("StartTask() error = %v", err)
+	}
+
+	// Parent should now be in_progress
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusInProgress {
+		t.Errorf("parent status = %q, want in_progress", parent.Status)
+	}
+}
+
+func TestService_StartTask_ParentAlreadyStarted(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	svc.StartTask(parent.ID) // Start parent first
+	subtask, _ := svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Start subtask - should not error even though parent is started
+	_, err := svc.StartTask(subtask.ID)
+	if err != nil {
+		t.Fatalf("StartTask() error = %v", err)
+	}
+}
