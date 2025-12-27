@@ -211,7 +211,7 @@ func TestService_Delete(t *testing.T) {
 
 	task, _ := svc.Create("To Delete", "Desc", PriorityMedium, "feature", nil)
 
-	if err := svc.Delete(task.ID); err != nil {
+	if err := svc.Delete(task.ID, false); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
@@ -444,5 +444,55 @@ func TestService_CompleteTask_AutoCompletesParent(t *testing.T) {
 	parent, _ = svc.Get(parent.ID)
 	if parent.Status != StatusDone {
 		t.Errorf("parent status = %q, want done", parent.Status)
+	}
+}
+
+func TestService_Delete_BlocksIfHasSubtasks(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Try to delete parent - should fail
+	err := svc.Delete(parent.ID, false)
+	if err == nil {
+		t.Error("Delete() should fail when task has subtasks")
+	}
+}
+
+func TestService_Delete_ForceDeletesSubtasks(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	sub, _ := svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Force delete parent
+	err := svc.Delete(parent.ID, true)
+	if err != nil {
+		t.Fatalf("Delete(force=true) error = %v", err)
+	}
+
+	// Both should be gone
+	if _, err := svc.Get(parent.ID); err == nil {
+		t.Error("parent should be deleted")
+	}
+	if _, err := svc.Get(sub.ID); err == nil {
+		t.Error("subtask should be deleted")
+	}
+}
+
+func TestService_Delete_SubtaskAllowed(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	sub, _ := svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Delete subtask - should work
+	err := svc.Delete(sub.ID, false)
+	if err != nil {
+		t.Fatalf("Delete(subtask) error = %v", err)
 	}
 }

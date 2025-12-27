@@ -96,8 +96,10 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	deleteCmd.Description = "Delete a task"
 	var deleteIDStr string
 	var deleteJSON bool
+	var deleteForce bool
 	deleteCmd.AddPositionalValue(&deleteIDStr, "id", 1, true, "Task ID")
 	deleteCmd.Bool(&deleteJSON, "j", "json", "Output as JSON")
+	deleteCmd.Bool(&deleteForce, "f", "force", "Force delete (also deletes subtasks)")
 	flaggy.AttachSubcommand(deleteCmd, 1)
 
 	// Start subcommand
@@ -163,7 +165,7 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "Error: invalid task ID: %s\n", deleteIDStr)
 			return 1
 		}
-		return cmdDelete(stdout, stderr, deleteJSON, deleteID)
+		return cmdDelete(stdout, stderr, deleteJSON, deleteID, deleteForce)
 	}
 
 	if startCmd.Used {

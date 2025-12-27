@@ -79,6 +79,9 @@ func registerManagementTools(s *server.MCPServer, svc *task.Service, validTypes 
 			mcp.Required(),
 			mcp.Description("Task ID"),
 		),
+		mcp.WithBoolean("delete_subtasks",
+			mcp.Description("If true, also delete all subtasks (required if task has subtasks)"),
+		),
 	)
 	s.AddTool(deleteTool, deleteTaskHandler(svc))
 
@@ -172,8 +175,9 @@ func updateTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 func deleteTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := req.GetInt("id", 0)
+		deleteSubtasks := req.GetBool("delete_subtasks", false)
 
-		if err := svc.Delete(id); err != nil {
+		if err := svc.Delete(id, deleteSubtasks); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 

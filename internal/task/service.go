@@ -166,12 +166,30 @@ func (s *Service) Update(id int, title, description *string, status *Status, pri
 }
 
 // Delete removes a task
-func (s *Service) Delete(id int) error {
-	if _, err := s.Get(id); err != nil {
+func (s *Service) Delete(id int, deleteSubtasks bool) error {
+	t, err := s.Get(id)
+	if err != nil {
 		return err
 	}
 
-	if err := s.storage.Delete(id); err != nil {
+	// Check for subtasks
+	if s.index.HasSubtasks(id) {
+		if !deleteSubtasks {
+			total, _ := s.index.SubtaskCounts(id)
+			return fmt.Errorf("cannot delete task %d: has %d subtask(s). Use delete_subtasks to force", id, total)
+		}
+
+		// Delete all subtasks first
+		subtasks := s.index.GetSubtasks(id)
+		for _, sub := range subtasks {
+			if err := s.storage.Delete(sub.ID); err != nil {
+				return fmt.Errorf("failed to delete subtask %d: %w", sub.ID, err)
+			}
+			s.index.Delete(sub.ID)
+		}
+	}
+
+	if err := s.storage.Delete(t.ID); err != nil {
 		return err
 	}
 
