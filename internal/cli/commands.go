@@ -29,7 +29,7 @@ func initService() (*task.Service, *config.Config, error) {
 }
 
 // cmdList handles the list command
-func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskType string) int {
+func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskType string, parentID int) int {
 	svc, _, err := initService()
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -52,7 +52,11 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 		typePtr = &taskType
 	}
 
-	tasks := svc.List(statusPtr, priorityPtr, typePtr, nil)
+	// parentID semantics:
+	// - Default (0): show top-level tasks only (parentID = 0)
+	// - Specified N: show subtasks of task N (parentID = N)
+	parentPtr := &parentID
+	tasks := svc.List(statusPtr, priorityPtr, typePtr, parentPtr)
 
 	if jsonOutput {
 		// Ensure we always output a JSON array, even if empty

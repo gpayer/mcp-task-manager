@@ -39,10 +39,12 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	listCmd.Description = "List tasks with optional filters"
 	var listStatus, listPriority, listType string
 	var listJSON bool
+	var listParent int
 	listCmd.String(&listStatus, "s", "status", "Filter by status (todo|in_progress|done)")
 	listCmd.String(&listPriority, "p", "priority", "Filter by priority (critical|high|medium|low)")
 	listCmd.String(&listType, "t", "type", "Filter by type")
 	listCmd.Bool(&listJSON, "j", "json", "Output as JSON")
+	listCmd.Int(&listParent, "", "parent", "List subtasks of parent task ID (default: top-level tasks)")
 	flaggy.AttachSubcommand(listCmd, 1)
 
 	// Get subcommand
@@ -132,7 +134,7 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if listCmd.Used {
-		return cmdList(stdout, stderr, listJSON, listStatus, listPriority, listType)
+		return cmdList(stdout, stderr, listJSON, listStatus, listPriority, listType, listParent)
 	}
 
 	if getCmd.Used {
