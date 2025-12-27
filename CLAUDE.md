@@ -65,6 +65,7 @@ title: "Task title"
 status: todo          # todo | in_progress | done
 priority: high        # critical | high | medium | low
 type: feature         # configurable, defaults: feature, bug
+parent_id: 0          # optional, 0 or omitted = top-level task
 created_at: 2025-01-15T10:30:00Z
 updated_at: 2025-01-15T10:30:00Z
 ---
@@ -84,23 +85,45 @@ Markdown description here.
 - Named levels: `critical` > `high` > `medium` > `low`
 - Tiebreaker: creation date (older first)
 
-## MCP Tools (MVP)
+### Subtasks
+Tasks support single-level nesting via the `parent_id` field.
+
+**Constraints:**
+- Only one level of nesting allowed (subtasks cannot have subtasks)
+- Parent task must exist when creating a subtask
+
+**Automatic Behaviors:**
+- **Auto-start parent:** Starting a subtask automatically starts its parent (if parent is `todo`)
+- **Block parent completion:** Cannot complete a parent task while it has incomplete subtasks
+- **Auto-complete parent:** When the last incomplete subtask is completed, the parent is automatically marked `done`
+
+**Delete Protection:**
+- Deleting a parent with subtasks requires explicit action:
+  - Use `delete_subtasks: true` to cascade delete all subtasks
+  - Or delete subtasks individually first
+
+**Agent Workflow Integration:**
+- `get_next_task` skips parent tasks that have incomplete subtasks (returns subtasks instead)
+- `list_tasks` shows top-level tasks by default; use `parent_id` filter to list subtasks of a specific parent
+- `get_task` includes subtasks in the response for parent tasks
+
+## MCP Tools
 
 ### Task Management
 | Tool | Description |
 |------|-------------|
-| `create_task` | Create a new task with title, description, priority, type |
+| `create_task` | Create a new task with title, description, priority, type, and optional `parent_id` for subtasks |
 | `update_task` | Modify task fields |
-| `list_tasks` | List tasks with optional filters (status, priority, type) |
-| `get_task` | Get full details of a task by ID |
-| `delete_task` | Remove a task |
+| `list_tasks` | List tasks with optional filters (status, priority, type, parent_id); top-level tasks by default |
+| `get_task` | Get full details of a task by ID (includes subtasks for parent tasks) |
+| `delete_task` | Remove a task; use `delete_subtasks: true` to cascade delete subtasks |
 
 ### Agent Workflow
 | Tool | Description |
 |------|-------------|
-| `get_next_task` | Returns highest priority `todo` task |
-| `start_task` | Move task from `todo` to `in_progress` |
-| `complete_task` | Move task from `in_progress` to `done` |
+| `get_next_task` | Returns highest priority `todo` task (skips parents with incomplete subtasks) |
+| `start_task` | Move task from `todo` to `in_progress` (auto-starts parent if subtask) |
+| `complete_task` | Move task from `in_progress` to `done` (auto-completes parent if last subtask) |
 
 ## Configuration
 
@@ -157,6 +180,7 @@ mcp-task-manager/
 
 ### get_next_task
 - Returns highest priority `todo` task (priority order, then oldest first)
+- Skips parent tasks that have incomplete subtasks (returns actionable subtasks instead)
 - If no `todo` tasks exist, returns "no tasks available" message (not an error)
 
 ### Index Cache
@@ -175,7 +199,6 @@ mcp-task-manager/
 - Type: must be in configured list (default: `feature`, `bug`)
 
 ## Future Considerations (Post-MVP)
-- Subtasks
 - Comments/history
 - Task dependencies (`blocked_by`)
 - Additional task types (chore, docs, refactor)
