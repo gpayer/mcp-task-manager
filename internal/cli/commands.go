@@ -52,7 +52,7 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 		typePtr = &taskType
 	}
 
-	tasks := svc.List(statusPtr, priorityPtr, typePtr)
+	tasks := svc.List(statusPtr, priorityPtr, typePtr, nil)
 
 	if jsonOutput {
 		// Ensure we always output a JSON array, even if empty

@@ -205,7 +205,7 @@ func listTasksHandler(svc *task.Service) server.ToolHandlerFunc {
 			taskType = &v
 		}
 
-		tasks := svc.List(status, priority, taskType)
+		tasks := svc.List(status, priority, taskType, nil)
 
 		if len(tasks) == 0 {
 			return mcp.NewToolResultText("No tasks found"), nil

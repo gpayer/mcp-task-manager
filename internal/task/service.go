@@ -21,7 +21,7 @@ type Index interface {
 	Set(t *Task)
 	Delete(id int)
 	All() []*Task
-	Filter(status *Status, priority *Priority, taskType *string) []*Task
+	Filter(status *Status, priority *Priority, taskType *string, parentID *int) []*Task
 	NextTodo() *Task
 	NextID() int
 	// Subtask methods
@@ -198,8 +198,8 @@ func (s *Service) Delete(id int, deleteSubtasks bool) error {
 }
 
 // List returns all tasks, optionally filtered
-func (s *Service) List(status *Status, priority *Priority, taskType *string) []*Task {
-	return s.index.Filter(status, priority, taskType)
+func (s *Service) List(status *Status, priority *Priority, taskType *string, parentID *int) []*Task {
+	return s.index.Filter(status, priority, taskType, parentID)
 }
 
 // GetNextTask returns the highest priority todo task

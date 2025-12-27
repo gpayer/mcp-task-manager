@@ -69,7 +69,7 @@ func (m *mockIndex) All() []*Task {
 	return result
 }
 
-func (m *mockIndex) Filter(status *Status, priority *Priority, taskType *string) []*Task {
+func (m *mockIndex) Filter(status *Status, priority *Priority, taskType *string, parentID *int) []*Task {
 	var result []*Task
 	for _, t := range m.tasks {
 		if status != nil && t.Status != *status {
@@ -80,6 +80,17 @@ func (m *mockIndex) Filter(status *Status, priority *Priority, taskType *string)
 		}
 		if taskType != nil && t.Type != *taskType {
 			continue
+		}
+		if parentID != nil {
+			if *parentID == 0 {
+				if t.ParentID != nil {
+					continue
+				}
+			} else {
+				if t.ParentID == nil || *t.ParentID != *parentID {
+					continue
+				}
+			}
 		}
 		result = append(result, t)
 	}
@@ -310,14 +321,14 @@ func TestService_List(t *testing.T) {
 	svc.Create("Task 3", "Desc", PriorityMedium, "feature", nil)
 
 	// All
-	all := svc.List(nil, nil, nil)
+	all := svc.List(nil, nil, nil, nil)
 	if len(all) != 3 {
 		t.Errorf("List() all = %d, want 3", len(all))
 	}
 
 	// By type
 	featureType := "feature"
-	features := svc.List(nil, nil, &featureType)
+	features := svc.List(nil, nil, &featureType, nil)
 	if len(features) != 2 {
 		t.Errorf("List() by feature = %d, want 2", len(features))
 	}

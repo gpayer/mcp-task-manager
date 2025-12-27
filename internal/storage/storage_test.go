@@ -200,27 +200,27 @@ func TestIndex_Filter(t *testing.T) {
 
 	// Filter by status
 	todoStatus := task.StatusTodo
-	filtered := idx.Filter(&todoStatus, nil, nil)
+	filtered := idx.Filter(&todoStatus, nil, nil, nil)
 	if len(filtered) != 2 {
 		t.Errorf("Filter by todo status returned %d tasks, want 2", len(filtered))
 	}
 
 	// Filter by priority
 	highPriority := task.PriorityHigh
-	filtered = idx.Filter(nil, &highPriority, nil)
+	filtered = idx.Filter(nil, &highPriority, nil, nil)
 	if len(filtered) != 1 {
 		t.Errorf("Filter by high priority returned %d tasks, want 1", len(filtered))
 	}
 
 	// Filter by type
 	featureType := "feature"
-	filtered = idx.Filter(nil, nil, &featureType)
+	filtered = idx.Filter(nil, nil, &featureType, nil)
 	if len(filtered) != 2 {
 		t.Errorf("Filter by feature type returned %d tasks, want 2", len(filtered))
 	}
 
 	// Combined filter
-	filtered = idx.Filter(&todoStatus, nil, &featureType)
+	filtered = idx.Filter(&todoStatus, nil, &featureType, nil)
 	if len(filtered) != 2 {
 		t.Errorf("Combined filter returned %d tasks, want 2", len(filtered))
 	}
@@ -529,5 +529,44 @@ func TestIndex_NextTodo_ReturnsParentWithoutSubtasks(t *testing.T) {
 	}
 	if next.ID != 1 {
 		t.Errorf("NextTodo() ID = %d, want 1", next.ID)
+	}
+}
+
+func TestIndex_Filter_ByParentID(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	parent := &task.Task{ID: 1, Title: "Parent", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature"}
+	storage.Save(parent)
+
+	parentID := 1
+	sub1 := &task.Task{ID: 2, ParentID: &parentID, Title: "Sub 1", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature"}
+	sub2 := &task.Task{ID: 3, ParentID: &parentID, Title: "Sub 2", Status: task.StatusDone, Priority: task.PriorityMedium, Type: "feature"}
+	storage.Save(sub1)
+	storage.Save(sub2)
+
+	standalone := &task.Task{ID: 4, Title: "Standalone", Status: task.StatusTodo, Priority: task.PriorityLow, Type: "feature"}
+	storage.Save(standalone)
+
+	idx.Load()
+
+	// Filter subtasks of parent
+	result := idx.Filter(nil, nil, nil, &parentID)
+	if len(result) != 2 {
+		t.Errorf("Filter(parent_id=1) = %d, want 2", len(result))
+	}
+
+	// Filter top-level only (parent_id = 0 means top-level)
+	topLevel := 0
+	result = idx.Filter(nil, nil, nil, &topLevel)
+	if len(result) != 2 {
+		t.Errorf("Filter(parent_id=0) = %d, want 2 (parent + standalone)", len(result))
+	}
+
+	// No filter - returns all tasks
+	result = idx.Filter(nil, nil, nil, nil)
+	if len(result) != 4 {
+		t.Errorf("Filter(parent_id=nil) = %d, want 4", len(result))
 	}
 }

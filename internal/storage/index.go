@@ -115,7 +115,8 @@ func (idx *Index) All() []*task.Task {
 }
 
 // Filter returns tasks matching the given criteria
-func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType *string) []*task.Task {
+// parentID: nil = all tasks, 0 = top-level only, >0 = subtasks of that parent
+func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType *string, parentID *int) []*task.Task {
 	var result []*task.Task
 	for _, t := range idx.tasks {
 		if status != nil && t.Status != *status {
@@ -126,6 +127,19 @@ func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType 
 		}
 		if taskType != nil && t.Type != *taskType {
 			continue
+		}
+		if parentID != nil {
+			if *parentID == 0 {
+				// Top-level only
+				if t.ParentID != nil {
+					continue
+				}
+			} else {
+				// Subtasks of specific parent
+				if t.ParentID == nil || *t.ParentID != *parentID {
+					continue
+				}
+			}
 		}
 		result = append(result, t)
 	}
