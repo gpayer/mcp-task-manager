@@ -103,6 +103,9 @@ func registerManagementTools(s *server.MCPServer, svc *task.Service, validTypes 
 			mcp.Description("Filter by task type"),
 			mcp.Enum(validTypes...),
 		),
+		mcp.WithNumber("parent_id",
+			mcp.Description("Filter by parent task ID (0 for top-level tasks, omit for top-level by default)"),
+		),
 	)
 	s.AddTool(listTool, listTasksHandler(svc))
 }
@@ -215,7 +218,16 @@ func listTasksHandler(svc *task.Service) server.ToolHandlerFunc {
 			taskType = &v
 		}
 
-		tasks := svc.List(status, priority, taskType, nil)
+		// Default to showing top-level tasks (parentID = 0)
+		// If parent_id is explicitly provided, use that value
+		defaultParentID := 0
+		parentID := &defaultParentID
+		if _, ok := args["parent_id"]; ok {
+			id := req.GetInt("parent_id", 0)
+			parentID = &id
+		}
+
+		tasks := svc.List(status, priority, taskType, parentID)
 
 		if len(tasks) == 0 {
 			return mcp.NewToolResultText("No tasks found"), nil
