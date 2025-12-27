@@ -69,11 +69,13 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	var createType = "feature"
 	var createDesc string
 	var createJSON bool
+	var createParent int
 	createCmd.AddPositionalValue(&createTitle, "title", 1, true, "Task title")
 	createCmd.String(&createPriority, "p", "priority", "Priority (default: medium)")
 	createCmd.String(&createType, "t", "type", "Type (default: feature)")
 	createCmd.String(&createDesc, "d", "description", "Task description")
 	createCmd.Bool(&createJSON, "j", "json", "Output as JSON")
+	createCmd.Int(&createParent, "", "parent", "Parent task ID (creates a subtask)")
 	flaggy.AttachSubcommand(createCmd, 1)
 
 	// Update subcommand
@@ -147,7 +149,7 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if createCmd.Used {
-		return cmdCreate(stdout, stderr, createJSON, createTitle, createPriority, createType, createDesc)
+		return cmdCreate(stdout, stderr, createJSON, createTitle, createPriority, createType, createDesc, createParent)
 	}
 
 	if updateCmd.Used {

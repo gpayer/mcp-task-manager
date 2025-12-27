@@ -127,14 +127,19 @@ func cmdNext(stdout, stderr io.Writer, jsonOutput bool) int {
 }
 
 // cmdCreate handles the create command
-func cmdCreate(stdout, stderr io.Writer, jsonOutput bool, title, priority, taskType, description string) int {
+func cmdCreate(stdout, stderr io.Writer, jsonOutput bool, title, priority, taskType, description string, parentID int) int {
 	svc, _, err := initService()
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
 
-	t, err := svc.Create(title, description, task.Priority(priority), taskType, nil)
+	var parentPtr *int
+	if parentID > 0 {
+		parentPtr = &parentID
+	}
+
+	t, err := svc.Create(title, description, task.Priority(priority), taskType, parentPtr)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
