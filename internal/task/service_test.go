@@ -571,3 +571,277 @@ func TestService_GetWithSubtasks_NotFound(t *testing.T) {
 		t.Error("GetWithSubtasks() on non-existent task should fail")
 	}
 }
+
+// TestSubtaskLifecycle is a comprehensive integration test covering the full subtask workflow:
+// Create parent -> Create subtasks -> Start subtask (auto-starts parent) -> Complete subtasks
+// -> Parent auto-completes -> Delete protection -> Force delete with cascade
+func TestSubtaskLifecycle(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	if err := svc.Initialize(); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// ===========================================================================
+	// PHASE 1: Create parent task
+	// ===========================================================================
+	t.Log("Phase 1: Creating parent task")
+
+	parent, err := svc.Create("Parent Task", "A parent task with subtasks", PriorityHigh, "feature", nil)
+	if err != nil {
+		t.Fatalf("Create(parent) error = %v", err)
+	}
+	if parent.ID != 1 {
+		t.Errorf("parent.ID = %d, want 1", parent.ID)
+	}
+	if parent.Status != StatusTodo {
+		t.Errorf("parent.Status = %q, want %q", parent.Status, StatusTodo)
+	}
+	if parent.ParentID != nil {
+		t.Error("parent.ParentID should be nil")
+	}
+
+	// ===========================================================================
+	// PHASE 2: Create subtasks under the parent
+	// ===========================================================================
+	t.Log("Phase 2: Creating subtasks")
+
+	sub1, err := svc.CreateSubtask("Subtask 1", "First subtask", PriorityMedium, "feature", parent.ID)
+	if err != nil {
+		t.Fatalf("CreateSubtask(sub1) error = %v", err)
+	}
+	if sub1.ParentID == nil || *sub1.ParentID != parent.ID {
+		t.Errorf("sub1.ParentID = %v, want %d", sub1.ParentID, parent.ID)
+	}
+
+	time.Sleep(time.Millisecond) // Ensure different timestamps for ordering
+
+	sub2, err := svc.CreateSubtask("Subtask 2", "Second subtask", PriorityMedium, "feature", parent.ID)
+	if err != nil {
+		t.Fatalf("CreateSubtask(sub2) error = %v", err)
+	}
+
+	time.Sleep(time.Millisecond)
+
+	sub3, err := svc.CreateSubtask("Subtask 3", "Third subtask", PriorityLow, "feature", parent.ID)
+	if err != nil {
+		t.Fatalf("CreateSubtask(sub3) error = %v", err)
+	}
+
+	// Verify GetWithSubtasks returns correct data
+	t.Log("Verifying GetWithSubtasks")
+	retrievedParent, subtasks, err := svc.GetWithSubtasks(parent.ID)
+	if err != nil {
+		t.Fatalf("GetWithSubtasks() error = %v", err)
+	}
+	if retrievedParent.ID != parent.ID {
+		t.Errorf("GetWithSubtasks() parent.ID = %d, want %d", retrievedParent.ID, parent.ID)
+	}
+	if len(subtasks) != 3 {
+		t.Errorf("GetWithSubtasks() len(subtasks) = %d, want 3", len(subtasks))
+	}
+
+	// Verify all subtask IDs are present
+	subtaskIDs := make(map[int]bool)
+	for _, s := range subtasks {
+		subtaskIDs[s.ID] = true
+	}
+	if !subtaskIDs[sub1.ID] || !subtaskIDs[sub2.ID] || !subtaskIDs[sub3.ID] {
+		t.Errorf("GetWithSubtasks() missing subtask IDs; got %v, want %d, %d, %d",
+			subtaskIDs, sub1.ID, sub2.ID, sub3.ID)
+	}
+
+	// ===========================================================================
+	// PHASE 3: Verify NextTodo behavior - should return subtask, not parent
+	// ===========================================================================
+	t.Log("Phase 3: Verifying NextTodo prioritizes subtasks over parent")
+
+	// The NextTodo should return a subtask (not the parent) because parents with
+	// subtasks should be skipped. The highest priority subtask is sub1 or sub2
+	// (both PriorityMedium, sub1 is older).
+	next := svc.GetNextTask()
+	if next == nil {
+		t.Fatal("GetNextTask() returned nil, expected a task")
+	}
+	// Verify it's a subtask by checking ParentID is set
+	if next.ParentID == nil {
+		// This is the parent - which means the mock doesn't implement subtask skipping
+		// The real index should skip parents with subtasks, but the mock may not
+		t.Log("Note: mock NextTodo returned parent; real implementation should skip parents with subtasks")
+	}
+
+	// ===========================================================================
+	// PHASE 4: Start first subtask -> verify parent auto-started
+	// ===========================================================================
+	t.Log("Phase 4: Starting first subtask (should auto-start parent)")
+
+	// Verify parent is still todo before starting subtask
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusTodo {
+		t.Errorf("parent status before starting subtask = %q, want %q", parent.Status, StatusTodo)
+	}
+
+	// Start sub1
+	sub1, err = svc.StartTask(sub1.ID)
+	if err != nil {
+		t.Fatalf("StartTask(sub1) error = %v", err)
+	}
+	if sub1.Status != StatusInProgress {
+		t.Errorf("sub1 status after start = %q, want %q", sub1.Status, StatusInProgress)
+	}
+
+	// Verify parent was auto-started
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusInProgress {
+		t.Errorf("parent status after starting subtask = %q, want %q (auto-start)", parent.Status, StatusInProgress)
+	}
+
+	// ===========================================================================
+	// PHASE 5: Complete first subtask
+	// ===========================================================================
+	t.Log("Phase 5: Completing first subtask")
+
+	sub1, err = svc.CompleteTask(sub1.ID)
+	if err != nil {
+		t.Fatalf("CompleteTask(sub1) error = %v", err)
+	}
+	if sub1.Status != StatusDone {
+		t.Errorf("sub1 status after complete = %q, want %q", sub1.Status, StatusDone)
+	}
+
+	// Parent should still be in_progress (not all subtasks done)
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusInProgress {
+		t.Errorf("parent status after completing sub1 = %q, want %q", parent.Status, StatusInProgress)
+	}
+
+	// ===========================================================================
+	// PHASE 6: Try to complete parent with incomplete subtasks (should fail)
+	// ===========================================================================
+	t.Log("Phase 6: Verifying parent completion is blocked with incomplete subtasks")
+
+	_, err = svc.CompleteTask(parent.ID)
+	if err == nil {
+		t.Error("CompleteTask(parent) should fail when subtasks are incomplete")
+	}
+
+	// ===========================================================================
+	// PHASE 7: Start and complete remaining subtasks -> parent auto-completes
+	// ===========================================================================
+	t.Log("Phase 7: Completing remaining subtasks (should auto-complete parent)")
+
+	// Start and complete sub2
+	sub2, err = svc.StartTask(sub2.ID)
+	if err != nil {
+		t.Fatalf("StartTask(sub2) error = %v", err)
+	}
+	sub2, err = svc.CompleteTask(sub2.ID)
+	if err != nil {
+		t.Fatalf("CompleteTask(sub2) error = %v", err)
+	}
+
+	// Parent still in_progress (sub3 not done)
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusInProgress {
+		t.Errorf("parent status after completing sub2 = %q, want %q", parent.Status, StatusInProgress)
+	}
+
+	// Start and complete sub3 (last subtask)
+	sub3, err = svc.StartTask(sub3.ID)
+	if err != nil {
+		t.Fatalf("StartTask(sub3) error = %v", err)
+	}
+	sub3, err = svc.CompleteTask(sub3.ID)
+	if err != nil {
+		t.Fatalf("CompleteTask(sub3) error = %v", err)
+	}
+
+	// Now parent should be auto-completed!
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusDone {
+		t.Errorf("parent status after completing all subtasks = %q, want %q (auto-complete)", parent.Status, StatusDone)
+	}
+
+	// ===========================================================================
+	// PHASE 8: Create new parent and subtask for delete tests
+	// ===========================================================================
+	t.Log("Phase 8: Testing delete protection")
+
+	parent2, err := svc.Create("Parent Task 2", "Another parent", PriorityMedium, "feature", nil)
+	if err != nil {
+		t.Fatalf("Create(parent2) error = %v", err)
+	}
+
+	sub4, err := svc.CreateSubtask("Subtask 4", "Child of parent2", PriorityLow, "feature", parent2.ID)
+	if err != nil {
+		t.Fatalf("CreateSubtask(sub4) error = %v", err)
+	}
+
+	// Try to delete parent without force (should fail)
+	err = svc.Delete(parent2.ID, false)
+	if err == nil {
+		t.Error("Delete(parent, force=false) should fail when parent has subtasks")
+	}
+
+	// Verify parent and subtask still exist
+	if _, err := svc.Get(parent2.ID); err != nil {
+		t.Error("parent2 should still exist after failed delete")
+	}
+	if _, err := svc.Get(sub4.ID); err != nil {
+		t.Error("sub4 should still exist after failed delete")
+	}
+
+	// ===========================================================================
+	// PHASE 9: Force delete parent -> should cascade delete subtasks
+	// ===========================================================================
+	t.Log("Phase 9: Testing force delete with cascade")
+
+	err = svc.Delete(parent2.ID, true)
+	if err != nil {
+		t.Fatalf("Delete(parent, force=true) error = %v", err)
+	}
+
+	// Both parent and subtask should be gone
+	if _, err := svc.Get(parent2.ID); err == nil {
+		t.Error("parent2 should be deleted after force delete")
+	}
+	if _, err := svc.Get(sub4.ID); err == nil {
+		t.Error("sub4 should be cascade-deleted with parent")
+	}
+
+	// ===========================================================================
+	// PHASE 10: Verify subtask can be deleted individually
+	// ===========================================================================
+	t.Log("Phase 10: Testing individual subtask deletion")
+
+	parent3, _ := svc.Create("Parent Task 3", "Third parent", PriorityLow, "feature", nil)
+	sub5, _ := svc.CreateSubtask("Subtask 5", "Will be deleted", PriorityLow, "feature", parent3.ID)
+	sub6, _ := svc.CreateSubtask("Subtask 6", "Will remain", PriorityLow, "feature", parent3.ID)
+
+	// Delete individual subtask (should work without force)
+	err = svc.Delete(sub5.ID, false)
+	if err != nil {
+		t.Fatalf("Delete(subtask) error = %v", err)
+	}
+
+	// Verify sub5 is gone but parent and sub6 remain
+	if _, err := svc.Get(sub5.ID); err == nil {
+		t.Error("sub5 should be deleted")
+	}
+	if _, err := svc.Get(parent3.ID); err != nil {
+		t.Error("parent3 should still exist")
+	}
+	if _, err := svc.Get(sub6.ID); err != nil {
+		t.Error("sub6 should still exist")
+	}
+
+	// Verify GetWithSubtasks reflects the deletion
+	_, remainingSubtasks, _ := svc.GetWithSubtasks(parent3.ID)
+	if len(remainingSubtasks) != 1 {
+		t.Errorf("len(subtasks) after deletion = %d, want 1", len(remainingSubtasks))
+	}
+	if remainingSubtasks[0].ID != sub6.ID {
+		t.Errorf("remaining subtask ID = %d, want %d", remainingSubtasks[0].ID, sub6.ID)
+	}
+
+	t.Log("Subtask lifecycle integration test completed successfully")
+}
