@@ -403,3 +403,82 @@ func TestIndex_RebuildFromFiles(t *testing.T) {
 		t.Errorf("All() after rebuild returned %d tasks, want 2", len(all))
 	}
 }
+
+func TestIndex_GetSubtasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Create parent task
+	parent := &task.Task{ID: 1, Title: "Parent", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature"}
+	storage.Save(parent)
+
+	// Create subtasks
+	parentID := 1
+	sub1 := &task.Task{ID: 2, ParentID: &parentID, Title: "Sub 1", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature"}
+	sub2 := &task.Task{ID: 3, ParentID: &parentID, Title: "Sub 2", Status: task.StatusDone, Priority: task.PriorityMedium, Type: "feature"}
+	storage.Save(sub1)
+	storage.Save(sub2)
+
+	idx.Load()
+
+	subtasks := idx.GetSubtasks(1)
+	if len(subtasks) != 2 {
+		t.Errorf("GetSubtasks(1) = %d, want 2", len(subtasks))
+	}
+
+	// Non-existent parent
+	subtasks = idx.GetSubtasks(99)
+	if len(subtasks) != 0 {
+		t.Errorf("GetSubtasks(99) = %d, want 0", len(subtasks))
+	}
+}
+
+func TestIndex_HasSubtasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	parent := &task.Task{ID: 1, Title: "Parent", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature"}
+	storage.Save(parent)
+
+	parentID := 1
+	sub := &task.Task{ID: 2, ParentID: &parentID, Title: "Sub", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature"}
+	storage.Save(sub)
+
+	idx.Load()
+
+	if !idx.HasSubtasks(1) {
+		t.Error("HasSubtasks(1) = false, want true")
+	}
+	if idx.HasSubtasks(2) {
+		t.Error("HasSubtasks(2) = true, want false")
+	}
+}
+
+func TestIndex_SubtaskCounts(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	parent := &task.Task{ID: 1, Title: "Parent", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature"}
+	storage.Save(parent)
+
+	parentID := 1
+	sub1 := &task.Task{ID: 2, ParentID: &parentID, Title: "Sub 1", Status: task.StatusDone, Priority: task.PriorityHigh, Type: "feature"}
+	sub2 := &task.Task{ID: 3, ParentID: &parentID, Title: "Sub 2", Status: task.StatusTodo, Priority: task.PriorityMedium, Type: "feature"}
+	sub3 := &task.Task{ID: 4, ParentID: &parentID, Title: "Sub 3", Status: task.StatusDone, Priority: task.PriorityLow, Type: "feature"}
+	storage.Save(sub1)
+	storage.Save(sub2)
+	storage.Save(sub3)
+
+	idx.Load()
+
+	total, done := idx.SubtaskCounts(1)
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+	if done != 2 {
+		t.Errorf("done = %d, want 2", done)
+	}
+}

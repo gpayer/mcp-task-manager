@@ -169,3 +169,40 @@ func (idx *Index) NextID() int {
 	}
 	return maxID + 1
 }
+
+// GetSubtasks returns all subtasks of a parent task
+func (idx *Index) GetSubtasks(parentID int) []*task.Task {
+	var result []*task.Task
+	for _, t := range idx.tasks {
+		if t.ParentID != nil && *t.ParentID == parentID {
+			result = append(result, t)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
+	return result
+}
+
+// HasSubtasks returns true if the task has any subtasks
+func (idx *Index) HasSubtasks(taskID int) bool {
+	for _, t := range idx.tasks {
+		if t.ParentID != nil && *t.ParentID == taskID {
+			return true
+		}
+	}
+	return false
+}
+
+// SubtaskCounts returns (total, done) counts for a parent task
+func (idx *Index) SubtaskCounts(parentID int) (total int, done int) {
+	for _, t := range idx.tasks {
+		if t.ParentID != nil && *t.ParentID == parentID {
+			total++
+			if t.Status == task.StatusDone {
+				done++
+			}
+		}
+	}
+	return
+}
