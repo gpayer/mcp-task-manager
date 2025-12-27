@@ -26,21 +26,52 @@ func FormatTaskDetail(t *task.Task) string {
 	return sb.String()
 }
 
+// subtaskCounts holds the count of subtasks for a parent task
+type subtaskCounts struct {
+	total int
+	done  int
+}
+
+// computeSubtaskCounts builds a map of parent ID to subtask counts from a task slice
+func computeSubtaskCounts(tasks []*task.Task) map[int]subtaskCounts {
+	counts := make(map[int]subtaskCounts)
+	for _, t := range tasks {
+		if t.ParentID != nil {
+			parentID := *t.ParentID
+			c := counts[parentID]
+			c.total++
+			if t.Status == task.StatusDone {
+				c.done++
+			}
+			counts[parentID] = c
+		}
+	}
+	return counts
+}
+
 // FormatTaskTable formats a list of tasks as a table
 func FormatTaskTable(tasks []*task.Task) string {
 	if len(tasks) == 0 {
 		return "No tasks found."
 	}
 
+	// Compute subtask counts for parent tasks
+	subtaskMap := computeSubtaskCounts(tasks)
+
 	var sb strings.Builder
 	w := tabwriter.NewWriter(&sb, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "ID\tTitle\tStatus\tPriority\tType")
+	fmt.Fprintln(w, "ID\tTitle\tStatus\tPriority\tType\tSubtasks")
 	for _, t := range tasks {
 		title := t.Title
 		if len(title) > 40 {
 			title = title[:37] + "..."
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", t.ID, title, t.Status, t.Priority, t.Type)
+		// Show subtask count if this task has subtasks
+		subtaskStr := ""
+		if counts, ok := subtaskMap[t.ID]; ok {
+			subtaskStr = fmt.Sprintf("[%d/%d]", counts.done, counts.total)
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n", t.ID, title, t.Status, t.Priority, t.Type, subtaskStr)
 	}
 	w.Flush()
 	return sb.String()

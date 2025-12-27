@@ -59,6 +59,26 @@ func TestFormatTaskTable(t *testing.T) {
 	if !strings.Contains(output, "Second task") {
 		t.Error("expected second task")
 	}
+	if !strings.Contains(output, "Subtasks") {
+		t.Error("expected Subtasks column header")
+	}
+}
+
+func TestFormatTaskTableWithSubtasks(t *testing.T) {
+	parentID := 1
+	tasks := []*task.Task{
+		{ID: 1, Title: "Parent task", Status: task.StatusInProgress, Priority: task.PriorityHigh, Type: "feature"},
+		{ID: 2, Title: "Subtask 1", Status: task.StatusDone, Priority: task.PriorityMedium, Type: "feature", ParentID: &parentID},
+		{ID: 3, Title: "Subtask 2", Status: task.StatusTodo, Priority: task.PriorityMedium, Type: "feature", ParentID: &parentID},
+		{ID: 4, Title: "Subtask 3", Status: task.StatusDone, Priority: task.PriorityMedium, Type: "feature", ParentID: &parentID},
+	}
+
+	output := FormatTaskTable(tasks)
+
+	// Parent task should show [2/3] (2 done out of 3 subtasks)
+	if !strings.Contains(output, "[2/3]") {
+		t.Errorf("expected subtask count [2/3] for parent task, got:\n%s", output)
+	}
 }
 
 func TestFormatTaskTableEmpty(t *testing.T) {
