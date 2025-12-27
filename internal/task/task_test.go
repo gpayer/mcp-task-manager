@@ -67,3 +67,24 @@ func TestIsValidPriority(t *testing.T) {
 		})
 	}
 }
+
+func TestTask_ParentID(t *testing.T) {
+	task := Task{
+		ID:       1,
+		ParentID: nil,
+		Title:    "Parent task",
+	}
+	if task.ParentID != nil {
+		t.Error("ParentID should be nil for top-level task")
+	}
+
+	parentID := 1
+	subtask := Task{
+		ID:       2,
+		ParentID: &parentID,
+		Title:    "Subtask",
+	}
+	if subtask.ParentID == nil || *subtask.ParentID != 1 {
+		t.Error("ParentID should be 1 for subtask")
+	}
+}
