@@ -133,16 +133,52 @@ func createTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 	}
 }
 
+// taskWithSubtasksResponse is the response structure for get_task
+type taskWithSubtasksResponse struct {
+	ID          int           `json:"id"`
+	ParentID    *int          `json:"parent_id,omitempty"`
+	Title       string        `json:"title"`
+	Description string        `json:"description"`
+	Status      task.Status   `json:"status"`
+	Priority    task.Priority `json:"priority"`
+	Type        string        `json:"type"`
+	CreatedAt   string        `json:"created_at"`
+	UpdatedAt   string        `json:"updated_at"`
+	Subtasks    []*task.Task  `json:"subtasks,omitempty"`
+}
+
 func getTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := req.GetInt("id", 0)
 
-		t, err := svc.Get(id)
+		t, subtasks, err := svc.GetWithSubtasks(id)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return taskResult(t)
+		response := taskWithSubtasksResponse{
+			ID:          t.ID,
+			ParentID:    t.ParentID,
+			Title:       t.Title,
+			Description: t.Description,
+			Status:      t.Status,
+			Priority:    t.Priority,
+			Type:        t.Type,
+			CreatedAt:   t.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt:   t.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+
+		// Only include subtasks if task has them (top-level task with children)
+		if len(subtasks) > 0 {
+			response.Subtasks = subtasks
+		}
+
+		data, err := json.MarshalIndent(response, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		return mcp.NewToolResultText(string(data)), nil
 	}
 }
 
