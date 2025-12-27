@@ -229,8 +229,43 @@ func (s *Service) CompleteTask(id int) (*Task, error) {
 		return nil, fmt.Errorf("task %d is not in progress (current: %s)", id, t.Status)
 	}
 
+	// Check if this task has incomplete subtasks
+	subtasks := s.index.GetSubtasks(id)
+	incompleteCount := 0
+	for _, sub := range subtasks {
+		if sub.Status != StatusDone {
+			incompleteCount++
+		}
+	}
+	if incompleteCount > 0 {
+		return nil, fmt.Errorf("cannot complete task %d: has %d incomplete subtask(s)", id, incompleteCount)
+	}
+
+	// Complete this task
 	status := StatusDone
-	return s.Update(id, nil, nil, &status, nil, nil)
+	completed, err := s.Update(id, nil, nil, &status, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// If this is a subtask, check if all siblings are done -> auto-complete parent
+	if t.ParentID != nil {
+		siblings := s.index.GetSubtasks(*t.ParentID)
+		allDone := true
+		for _, sib := range siblings {
+			if sib.Status != StatusDone {
+				allDone = false
+				break
+			}
+		}
+		if allDone {
+			if _, err := s.Update(*t.ParentID, nil, nil, &status, nil, nil); err != nil {
+				return nil, fmt.Errorf("failed to auto-complete parent: %w", err)
+			}
+		}
+	}
+
+	return completed, nil
 }
 
 // isValidType checks if task type is valid

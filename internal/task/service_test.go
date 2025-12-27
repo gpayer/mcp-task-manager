@@ -400,3 +400,49 @@ func TestService_StartTask_ParentAlreadyStarted(t *testing.T) {
 		t.Fatalf("StartTask() error = %v", err)
 	}
 }
+
+func TestService_CompleteTask_BlocksIfSubtasksIncomplete(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	svc.CreateSubtask("Subtask", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Start parent
+	svc.StartTask(parent.ID)
+
+	// Try to complete parent - should fail
+	_, err := svc.CompleteTask(parent.ID)
+	if err == nil {
+		t.Error("CompleteTask() should fail when subtasks are incomplete")
+	}
+}
+
+func TestService_CompleteTask_AutoCompletesParent(t *testing.T) {
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc.Initialize()
+
+	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
+	sub1, _ := svc.CreateSubtask("Sub 1", "Desc", PriorityMedium, "feature", parent.ID)
+	sub2, _ := svc.CreateSubtask("Sub 2", "Desc", PriorityMedium, "feature", parent.ID)
+
+	// Start and complete sub1
+	svc.StartTask(sub1.ID)
+	svc.CompleteTask(sub1.ID)
+
+	// Parent should still be in_progress
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusInProgress {
+		t.Errorf("parent status = %q, want in_progress", parent.Status)
+	}
+
+	// Start and complete sub2
+	svc.StartTask(sub2.ID)
+	svc.CompleteTask(sub2.ID)
+
+	// Parent should now be done
+	parent, _ = svc.Get(parent.ID)
+	if parent.Status != StatusDone {
+		t.Errorf("parent status = %q, want done", parent.Status)
+	}
+}
