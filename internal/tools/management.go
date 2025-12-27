@@ -31,6 +31,9 @@ func registerManagementTools(s *server.MCPServer, svc *task.Service, validTypes 
 			mcp.Description("Task type"),
 			mcp.Enum(validTypes...),
 		),
+		mcp.WithNumber("parent_id",
+			mcp.Description("Parent task ID (creates a subtask)"),
+		),
 	)
 	s.AddTool(createTool, createTaskHandler(svc))
 
@@ -111,7 +114,14 @@ func createTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 		priority := task.Priority(req.GetString("priority", ""))
 		taskType := req.GetString("type", "")
 
-		t, err := svc.Create(title, description, priority, taskType, nil)
+		var parentID *int
+		args := req.GetArguments()
+		if _, ok := args["parent_id"]; ok {
+			id := req.GetInt("parent_id", 0)
+			parentID = &id
+		}
+
+		t, err := svc.Create(title, description, priority, taskType, parentID)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
