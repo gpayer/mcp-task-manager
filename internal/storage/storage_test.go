@@ -482,3 +482,52 @@ func TestIndex_SubtaskCounts(t *testing.T) {
 		t.Errorf("done = %d, want 2", done)
 	}
 }
+
+func TestIndex_NextTodo_SkipsParentsWithSubtasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Create parent with subtask
+	parent := &task.Task{ID: 1, Title: "Parent", Status: task.StatusTodo, Priority: task.PriorityCritical, Type: "feature", CreatedAt: time.Now()}
+	storage.Save(parent)
+
+	parentID := 1
+	sub := &task.Task{ID: 2, ParentID: &parentID, Title: "Subtask", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: time.Now()}
+	storage.Save(sub)
+
+	// Create standalone task (lower priority)
+	standalone := &task.Task{ID: 3, Title: "Standalone", Status: task.StatusTodo, Priority: task.PriorityLow, Type: "feature", CreatedAt: time.Now()}
+	storage.Save(standalone)
+
+	idx.Load()
+
+	// Should return subtask (skipping parent even though it's higher priority)
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 2 {
+		t.Errorf("NextTodo() ID = %d, want 2 (subtask)", next.ID)
+	}
+}
+
+func TestIndex_NextTodo_ReturnsParentWithoutSubtasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Create parent without subtasks
+	parent := &task.Task{ID: 1, Title: "Parent", Status: task.StatusTodo, Priority: task.PriorityCritical, Type: "feature", CreatedAt: time.Now()}
+	storage.Save(parent)
+
+	idx.Load()
+
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 1 {
+		t.Errorf("NextTodo() ID = %d, want 1", next.ID)
+	}
+}

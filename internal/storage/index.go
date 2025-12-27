@@ -136,12 +136,18 @@ func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType 
 }
 
 // NextTodo returns the highest priority todo task
+// Parents with subtasks are skipped - the real work is in the subtasks
 func (idx *Index) NextTodo() *task.Task {
 	var candidates []*task.Task
 	for _, t := range idx.tasks {
-		if t.Status == task.StatusTodo {
-			candidates = append(candidates, t)
+		if t.Status != task.StatusTodo {
+			continue
 		}
+		// Skip parents that have subtasks
+		if idx.HasSubtasks(t.ID) {
+			continue
+		}
+		candidates = append(candidates, t)
 	}
 
 	if len(candidates) == 0 {
