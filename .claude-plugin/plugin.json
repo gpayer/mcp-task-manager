@@ -1,0 +1,11 @@
+{
+  "name": "mcp-task-manager",
+  "description": "Task manager MCP server with superpowers workflow integration",
+  "version": "1.0.0",
+  "author": {
+    "name": "Gernot Payer"
+  },
+  "repository": "https://github.com/gpayer/mcp-task-manager",
+  "license": "MIT",
+  "keywords": ["task-manager", "mcp", "workflow", "superpowers", "subtasks"]
+}
