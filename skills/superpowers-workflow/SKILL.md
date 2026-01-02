@@ -128,6 +128,7 @@ Instructions:
 - Follow the steps exactly as written
 - Commit when complete
 - Report what you implemented
+- IMPORTANT: do not complete the subtask via `mcp__task-manager__complete_task`, this will be done by the main agent
 ```
 
 Use `subagent_type: general-purpose` and `model: sonnet`.
