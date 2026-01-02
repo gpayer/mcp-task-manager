@@ -20,6 +20,12 @@ MCP Task Manager provides a simple but powerful task management system that inte
 
 - Go 1.21 or later
 
+### Install with Go
+
+```bash
+go install github.com/gpayer/mcp-task-manager/cmd/mcp-task-manager@latest
+```
+
 ### Download Pre-built Binaries
 
 Download the latest release for your platform from the [Releases page](https://github.com/gpayer/mcp-task-manager/releases):
@@ -28,10 +34,13 @@ Download the latest release for your platform from the [Releases page](https://g
 - `mcp-task-manager-linux-arm64` - Linux (ARM64)
 - `mcp-task-manager-windows-amd64.exe` - Windows (x86_64)
 
-Make the binary executable (Linux/macOS):
+After downloading, rename and make executable (Linux/macOS):
 
 ```bash
-chmod +x mcp-task-manager-linux-amd64
+mv mcp-task-manager-linux-amd64 mcp-task-manager
+chmod +x mcp-task-manager
+# Optionally move to a directory in your PATH:
+sudo mv mcp-task-manager /usr/local/bin/
 ```
 
 ### Build from Source
@@ -49,7 +58,7 @@ go build -o mcp-task-manager ./cmd/mcp-task-manager
 The MCP server communicates via stdio:
 
 ```bash
-./mcp-task-manager
+mcp-task-manager
 ```
 
 ### CLI Usage
@@ -58,31 +67,31 @@ The same binary also works as a standalone CLI tool when called with arguments:
 
 ```bash
 # List all tasks
-./mcp-task-manager list
-./mcp-task-manager list --status=todo --priority=high
-./mcp-task-manager list --json
+mcp-task-manager list
+mcp-task-manager list --status=todo --priority=high
+mcp-task-manager list --json
 
 # Get task details
-./mcp-task-manager get 1
-./mcp-task-manager get 1 --json
+mcp-task-manager get 1
+mcp-task-manager get 1 --json
 
 # Create a task
-./mcp-task-manager create "Fix login bug" -p high -t bug -d "Users can't log in"
+mcp-task-manager create "Fix login bug" -p high -t bug -d "Users can't log in"
 
 # Update a task
-./mcp-task-manager update 1 --title "New title" -s in_progress
+mcp-task-manager update 1 --title "New title" -s in_progress
 
 # Delete a task
-./mcp-task-manager delete 1
+mcp-task-manager delete 1
 
 # Workflow commands
-./mcp-task-manager next              # Get highest priority todo task
-./mcp-task-manager start 1           # Start a task (todo -> in_progress)
-./mcp-task-manager complete 1        # Complete a task (in_progress -> done)
+mcp-task-manager next              # Get highest priority todo task
+mcp-task-manager start 1           # Start a task (todo -> in_progress)
+mcp-task-manager complete 1        # Complete a task (in_progress -> done)
 
 # Other
-./mcp-task-manager version
-./mcp-task-manager --help
+mcp-task-manager version
+mcp-task-manager --help
 ```
 
 #### CLI Commands
@@ -117,27 +126,24 @@ Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_confi
 
 ### Claude Code Integration
 
-MCP Task Manager includes a skill for Claude Code that enables automated task execution with the superpowers plugin.
+MCP Task Manager includes a plugin for Claude Code that enables automated task execution with the superpowers plugin.
 
 **Setup:**
 
-1. Add the MCP server to your Claude Code configuration (`.claude/settings.json` or global settings):
-
-```json
-{
-  "mcpServers": {
-    "task-manager": {
-      "command": "/path/to/mcp-task-manager"
-    }
-  }
-}
-```
-
-2. Copy the skills directory to your project or global skills location:
+1. Add the MCP server:
 
 ```bash
-cp -r skills/superpowers-workflow ~/.claude/skills/
-# Or for project-local: cp -r skills/superpowers-workflow .claude/skills/
+claude mcp add --transport stdio task-manager -- mcp-task-manager
+```
+
+2. Install the plugin (includes the superpowers-workflow skill):
+
+```bash
+# Add the marketplace
+/plugin marketplace add gpayer/mcp-task-manager
+
+# Install the plugin
+/plugin install mcp-task-manager@mcp-task-manager
 ```
 
 **Usage:**
@@ -226,7 +232,7 @@ Tasks support single-level nesting via the `parent_id` field.
 **Creating subtasks:**
 ```bash
 # CLI
-./mcp-task-manager create "Implement login form" -p high --parent 1
+mcp-task-manager create "Implement login form" -p high --parent 1
 
 # MCP tool
 create_task with parent_id parameter

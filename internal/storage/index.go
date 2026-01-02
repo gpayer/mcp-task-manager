@@ -150,9 +150,14 @@ func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType 
 }
 
 // NextTodo returns the highest priority todo task
+// Priority order:
+// 1. Subtasks of in_progress parents (sorted by priority, then creation date)
+// 2. Top-level todo tasks and subtasks of todo parents (sorted by priority, then creation date)
 // Parents with subtasks are skipped - the real work is in the subtasks
 func (idx *Index) NextTodo() *task.Task {
-	var candidates []*task.Task
+	var inProgressSubtasks []*task.Task
+	var otherCandidates []*task.Task
+
 	for _, t := range idx.tasks {
 		if t.Status != task.StatusTodo {
 			continue
@@ -161,22 +166,40 @@ func (idx *Index) NextTodo() *task.Task {
 		if idx.HasSubtasks(t.ID) {
 			continue
 		}
-		candidates = append(candidates, t)
+
+		// Check if this is a subtask of an in_progress parent
+		if t.ParentID != nil {
+			if parent, ok := idx.Get(*t.ParentID); ok && parent.Status == task.StatusInProgress {
+				inProgressSubtasks = append(inProgressSubtasks, t)
+				continue
+			}
+		}
+
+		otherCandidates = append(otherCandidates, t)
 	}
 
-	if len(candidates) == 0 {
+	// Sort function: by priority (lower order = higher priority), then by creation date
+	sortByPriorityAndDate := func(tasks []*task.Task) {
+		sort.Slice(tasks, func(i, j int) bool {
+			if tasks[i].Priority.Order() != tasks[j].Priority.Order() {
+				return tasks[i].Priority.Order() < tasks[j].Priority.Order()
+			}
+			return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
+		})
+	}
+
+	// Prioritize subtasks of in_progress parents
+	if len(inProgressSubtasks) > 0 {
+		sortByPriorityAndDate(inProgressSubtasks)
+		return inProgressSubtasks[0]
+	}
+
+	if len(otherCandidates) == 0 {
 		return nil
 	}
 
-	// Sort by priority (lower order = higher priority), then by creation date
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].Priority.Order() != candidates[j].Priority.Order() {
-			return candidates[i].Priority.Order() < candidates[j].Priority.Order()
-		}
-		return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
-	})
-
-	return candidates[0]
+	sortByPriorityAndDate(otherCandidates)
+	return otherCandidates[0]
 }
 
 // NextID returns the next available task ID

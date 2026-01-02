@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "mcp-task-manager",
+  "version": "1.0.0",
+  "description": "Task manager MCP server with superpowers workflow integration",
+  "owner": {
+    "name": "Gernot Payer"
+  },
+  "plugins": [
+    {
+      "name": "mcp-task-manager",
+      "source": ".",
+      "description": "Task manager MCP server with superpowers workflow integration for Claude Code agents",
+      "version": "1.0.0",
+      "category": "productivity",
+      "keywords": ["task-manager", "mcp", "workflow", "superpowers", "subtasks"],
+      "author": {
+        "name": "Gernot Payer"
+      },
+      "repository": "https://github.com/gpayer/mcp-task-manager",
+      "license": "MIT"
+    }
+  ]
+}

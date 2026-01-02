@@ -47,7 +47,9 @@ digraph workflow {
 ### Phase 1: Get Task
 
 1. Call `mcp__task-manager__get_next_task`
-2. If no tasks available: announce "All tasks completed." and stop
+2. If no tasks available:
+   - Commit task file changes: `git add tasks/ && git commit -m "chore: update task states"`
+   - Announce "All tasks completed." and stop
 3. If result is a subtask: go to Phase 3 (Execution)
 4. If result is a parent task:
    - Call `mcp__task-manager__get_task` to check for existing subtasks
@@ -261,6 +263,9 @@ Task #7 auto-completed (all subtasks done).
 [Calls get_next_task - no tasks]
 All tasks completed.
 
+[Commits task files]
+git add tasks/ && git commit -m "chore: update task states"
+
 Summary:
 - Task #7: Add user authentication - DONE
   - Task #8: Add User model - DONE
@@ -276,3 +281,4 @@ Summary:
 - Provide full context to subagents (they have no shared memory)
 - Stop on failure, escalate to user
 - Task manager handles parent auto-completion
+- **Commit task files at workflow end:** When all tasks are completed, run `git add tasks/ && git commit -m "chore: update task states"` to version-control task state changes

@@ -103,6 +103,7 @@ Tasks support single-level nesting via the `parent_id` field.
   - Or delete subtasks individually first
 
 **Agent Workflow Integration:**
+- `get_next_task` prioritizes subtasks of `in_progress` parents over other todo tasks (ensures focused completion of started work)
 - `get_next_task` skips parent tasks that have incomplete subtasks (returns subtasks instead)
 - `list_tasks` shows top-level tasks by default; use `parent_id` filter to list subtasks of a specific parent
 - `get_task` includes subtasks in the response for parent tasks

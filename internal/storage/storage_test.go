@@ -532,6 +532,95 @@ func TestIndex_NextTodo_ReturnsParentWithoutSubtasks(t *testing.T) {
 	}
 }
 
+func TestIndex_NextTodo_PrioritizesInProgressParentSubtasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+
+	// Create in_progress parent with todo subtasks
+	inProgressParent := &task.Task{ID: 1, Title: "In Progress Parent", Status: task.StatusInProgress, Priority: task.PriorityMedium, Type: "feature", CreatedAt: now}
+	storage.Save(inProgressParent)
+
+	parentID1 := 1
+	subLowPriority := &task.Task{ID: 2, ParentID: &parentID1, Title: "Low Priority Subtask", Status: task.StatusTodo, Priority: task.PriorityLow, Type: "feature", CreatedAt: now}
+	subHighPriority := &task.Task{ID: 3, ParentID: &parentID1, Title: "High Priority Subtask", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now}
+	storage.Save(subLowPriority)
+	storage.Save(subHighPriority)
+
+	// Create standalone critical task (highest priority but should be deprioritized)
+	criticalStandalone := &task.Task{ID: 4, Title: "Critical Standalone", Status: task.StatusTodo, Priority: task.PriorityCritical, Type: "feature", CreatedAt: now}
+	storage.Save(criticalStandalone)
+
+	idx.Load()
+
+	// Should return high priority subtask of in_progress parent, not the critical standalone
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 3 {
+		t.Errorf("NextTodo() ID = %d, want 3 (high priority subtask of in_progress parent)", next.ID)
+	}
+
+	// Complete the high priority subtask
+	idx.tasks[3].Status = task.StatusDone
+
+	// Now should return low priority subtask of in_progress parent
+	next = idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil after completing high priority subtask")
+	}
+	if next.ID != 2 {
+		t.Errorf("NextTodo() ID = %d, want 2 (low priority subtask of in_progress parent)", next.ID)
+	}
+
+	// Complete the low priority subtask too
+	idx.tasks[2].Status = task.StatusDone
+
+	// Now should return the critical standalone
+	next = idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil after completing all subtasks")
+	}
+	if next.ID != 4 {
+		t.Errorf("NextTodo() ID = %d, want 4 (critical standalone)", next.ID)
+	}
+}
+
+func TestIndex_NextTodo_TodoParentSubtasksNotPrioritized(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+
+	// Create todo parent with subtasks (parent not started yet)
+	todoParent := &task.Task{ID: 1, Title: "Todo Parent", Status: task.StatusTodo, Priority: task.PriorityCritical, Type: "feature", CreatedAt: now}
+	storage.Save(todoParent)
+
+	parentID1 := 1
+	subHighPriority := &task.Task{ID: 2, ParentID: &parentID1, Title: "High Priority Subtask", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now}
+	storage.Save(subHighPriority)
+
+	// Create standalone medium task
+	mediumStandalone := &task.Task{ID: 3, Title: "Medium Standalone", Status: task.StatusTodo, Priority: task.PriorityMedium, Type: "feature", CreatedAt: now}
+	storage.Save(mediumStandalone)
+
+	idx.Load()
+
+	// Should return high priority subtask (normal priority sorting, not boosted)
+	// because parent is still in todo state, not in_progress
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 2 {
+		t.Errorf("NextTodo() ID = %d, want 2 (high priority subtask, normal sort order)", next.ID)
+	}
+}
+
 func TestIndex_Filter_ByParentID(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewMarkdownStorage(dir)
