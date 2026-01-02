@@ -20,6 +20,20 @@ MCP Task Manager provides a simple but powerful task management system that inte
 
 - Go 1.21 or later
 
+### Download Pre-built Binaries
+
+Download the latest release for your platform from the [Releases page](https://github.com/gpayer/mcp-task-manager/releases):
+
+- `mcp-task-manager-linux-amd64` - Linux (x86_64)
+- `mcp-task-manager-linux-arm64` - Linux (ARM64)
+- `mcp-task-manager-windows-amd64.exe` - Windows (x86_64)
+
+Make the binary executable (Linux/macOS):
+
+```bash
+chmod +x mcp-task-manager-linux-amd64
+```
+
 ### Build from Source
 
 ```bash
