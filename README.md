@@ -115,6 +115,35 @@ Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_confi
 }
 ```
 
+### Claude Code Integration
+
+MCP Task Manager includes a skill for Claude Code that enables automated task execution with the superpowers plugin.
+
+**Setup:**
+
+1. Add the MCP server to your Claude Code configuration (`.claude/settings.json` or global settings):
+
+```json
+{
+  "mcpServers": {
+    "task-manager": {
+      "command": "/path/to/mcp-task-manager"
+    }
+  }
+}
+```
+
+2. Copy the skills directory to your project or global skills location:
+
+```bash
+cp -r skills/superpowers-workflow ~/.claude/skills/
+# Or for project-local: cp -r skills/superpowers-workflow .claude/skills/
+```
+
+**Usage:**
+
+Use the `/mcp-task-manager:superpowers-workflow` skill to automatically execute pending tasks with planning, implementation, and code review phases.
+
 ## MCP Tools
 
 ### Task Management
