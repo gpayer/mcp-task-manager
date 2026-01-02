@@ -91,7 +91,7 @@ The same binary also works as a standalone CLI tool when called with arguments:
 |---------|-------------|
 | `list` | List tasks with optional filters (`-s status`, `-p priority`, `-t type`) |
 | `get <id>` | Get task details by ID |
-| `create <title>` | Create task (defaults: priority=medium, type=feature) |
+| `create <title>` | Create task (defaults: priority=medium, type=feature); use `--parent` for subtasks |
 | `update <id>` | Update task fields |
 | `delete <id>` | Delete a task |
 | `next` | Get highest priority todo task |
@@ -121,11 +121,11 @@ Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_confi
 
 | Tool | Description |
 |------|-------------|
-| `create_task` | Create a new task with title, description, priority, type |
+| `create_task` | Create a new task with title, description, priority, type, and optional `parent_id` for subtasks |
 | `update_task` | Modify task fields (title, description, status, priority, type) |
-| `list_tasks` | List tasks with optional filters (status, priority, type) |
-| `get_task` | Get full details of a task by ID |
-| `delete_task` | Remove a task |
+| `list_tasks` | List tasks with optional filters (status, priority, type); use `parent_id` filter for subtasks |
+| `get_task` | Get full details of a task by ID (includes subtasks for parent tasks) |
+| `delete_task` | Remove a task; use `delete_subtasks` to cascade |
 
 ### Agent Workflow
 
@@ -189,6 +189,25 @@ Detailed description in Markdown format.
 - `high` - Important tasks
 - `medium` - Normal priority (default)
 - `low` - Can wait
+
+### Subtasks
+
+Tasks support single-level nesting via the `parent_id` field.
+
+**Creating subtasks:**
+```bash
+# CLI
+./mcp-task-manager create "Implement login form" -p high --parent 1
+
+# MCP tool
+create_task with parent_id parameter
+```
+
+**Automatic behaviors:**
+- Starting a subtask auto-starts its parent task
+- Completing the last subtask auto-completes the parent
+- Parent tasks cannot be completed while subtasks remain incomplete
+- `get_next_task` returns subtasks instead of parents with incomplete subtasks
 
 ## Project Structure
 
