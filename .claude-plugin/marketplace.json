@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "mcp-task-manager",
-      "source": ".",
+      "source": "./",
       "description": "Task manager MCP server with superpowers workflow integration for Claude Code agents",
       "version": "1.0.0",
       "category": "productivity",
