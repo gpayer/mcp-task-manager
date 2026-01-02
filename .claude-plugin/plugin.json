@@ -3,7 +3,7 @@
   "description": "Task manager MCP server with superpowers workflow integration",
   "version": "1.0.0",
   "author": {
-    "name": "Gernot Payer"
+    "name": "Gernot Messow"
   },
   "repository": "https://github.com/gpayer/mcp-task-manager",
   "license": "MIT",
