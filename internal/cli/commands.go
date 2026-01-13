@@ -9,28 +9,68 @@ import (
 	"github.com/gpayer/mcp-task-manager/internal/task"
 )
 
-// initService initializes the task service
-func initService() (*task.Service, *config.Config, error) {
+// loadConfig loads configuration only (does not create directories)
+func loadConfig() (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load config: %w", err)
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
+	return cfg, nil
+}
 
+// initServiceWithConfig initializes the task service with an already loaded config
+func initServiceWithConfig(cfg *config.Config) (*task.Service, error) {
 	tasksDir := cfg.TasksDir()
 	mdStorage := storage.NewMarkdownStorage(tasksDir)
 	index := storage.NewIndex(tasksDir, mdStorage)
 	svc := task.NewService(mdStorage, index, cfg.TaskTypes, cfg)
 
 	if err := svc.Initialize(); err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize: %w", err)
+		return nil, fmt.Errorf("failed to initialize: %w", err)
+	}
+
+	return svc, nil
+}
+
+// initService initializes the task service (loads config and initializes)
+func initService() (*task.Service, *config.Config, error) {
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	svc, err := initServiceWithConfig(cfg)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return svc, cfg, nil
 }
 
+// checkProjectExists verifies a project was found, returns exit code
+func checkProjectExists(stderr io.Writer, cfg *config.Config) int {
+	if !cfg.ProjectFound {
+		fmt.Fprintln(stderr, "Error: no tasks directory found.")
+		fmt.Fprintln(stderr, "Create a task to initialize one here, or set MCP_TASKS_DIR.")
+		return 1
+	}
+	return 0
+}
+
 // cmdList handles the list command
 func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskType string, parentID int) int {
-	svc, _, err := initService()
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	// Check project exists for read operation
+	if code := checkProjectExists(stderr, cfg); code != 0 {
+		return code
+	}
+
+	svc, err := initServiceWithConfig(cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -85,7 +125,18 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 
 // cmdGet handles the get command
 func cmdGet(stdout, stderr io.Writer, jsonOutput bool, id int) int {
-	svc, _, err := initService()
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	// Check project exists for read operation
+	if code := checkProjectExists(stderr, cfg); code != 0 {
+		return code
+	}
+
+	svc, err := initServiceWithConfig(cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -120,7 +171,18 @@ func cmdGet(stdout, stderr io.Writer, jsonOutput bool, id int) int {
 
 // cmdNext handles the next command
 func cmdNext(stdout, stderr io.Writer, jsonOutput bool) int {
-	svc, _, err := initService()
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	// Check project exists for read operation
+	if code := checkProjectExists(stderr, cfg); code != 0 {
+		return code
+	}
+
+	svc, err := initServiceWithConfig(cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1

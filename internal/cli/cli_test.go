@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -233,5 +234,77 @@ func TestCompleteCommand(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "completed") {
 		t.Errorf("expected 'completed' message, got: %s", stdout.String())
+	}
+}
+
+func TestListCommandNoProject(t *testing.T) {
+	// Run from a temp directory with no project markers
+	// Use a deeply nested temp dir to avoid any existing tasks/ or mcp-tasks.yaml in /tmp
+	tmpDir := t.TempDir()
+	nestedDir := tmpDir + "/a/b/c/d"
+	os.MkdirAll(nestedDir, 0755)
+	originalWd, _ := os.Getwd()
+	os.Chdir(nestedDir)
+	defer os.Chdir(originalWd)
+
+	// Ensure no MCP_TASKS_DIR is set
+	os.Unsetenv("MCP_TASKS_DIR")
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "list"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Errorf("expected exit code 1 when no project found, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "no tasks directory found") {
+		t.Errorf("expected 'no tasks directory found' error, got: %s", stderr.String())
+	}
+}
+
+func TestGetCommandNoProject(t *testing.T) {
+	// Run from a temp directory with no project markers
+	// Use a deeply nested temp dir to avoid any existing tasks/ or mcp-tasks.yaml in /tmp
+	tmpDir := t.TempDir()
+	nestedDir := tmpDir + "/a/b/c/d"
+	os.MkdirAll(nestedDir, 0755)
+	originalWd, _ := os.Getwd()
+	os.Chdir(nestedDir)
+	defer os.Chdir(originalWd)
+
+	// Ensure no MCP_TASKS_DIR is set
+	os.Unsetenv("MCP_TASKS_DIR")
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "get", "1"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Errorf("expected exit code 1 when no project found, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "no tasks directory found") {
+		t.Errorf("expected 'no tasks directory found' error, got: %s", stderr.String())
+	}
+}
+
+func TestNextCommandNoProject(t *testing.T) {
+	// Run from a temp directory with no project markers
+	// Use a deeply nested temp dir to avoid any existing tasks/ or mcp-tasks.yaml in /tmp
+	tmpDir := t.TempDir()
+	nestedDir := tmpDir + "/a/b/c/d"
+	os.MkdirAll(nestedDir, 0755)
+	originalWd, _ := os.Getwd()
+	os.Chdir(nestedDir)
+	defer os.Chdir(originalWd)
+
+	// Ensure no MCP_TASKS_DIR is set
+	os.Unsetenv("MCP_TASKS_DIR")
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "next"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Errorf("expected exit code 1 when no project found, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "no tasks directory found") {
+		t.Errorf("expected 'no tasks directory found' error, got: %s", stderr.String())
 	}
 }
