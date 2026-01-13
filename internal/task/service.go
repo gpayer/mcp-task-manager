@@ -1,11 +1,15 @@
 package task
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/gpayer/mcp-task-manager/internal/config"
 )
+
+// ErrNoProjectFound is returned when read operations are attempted without an existing project
+var ErrNoProjectFound = errors.New("no tasks directory found. Create a task to initialize one here, or set MCP_TASKS_DIR")
 
 // Storage interface for task persistence
 type Storage interface {
@@ -48,6 +52,20 @@ func NewService(storage Storage, index Index, validTypes []string, cfg *config.C
 		validTypes: validTypes,
 		config:     cfg,
 	}
+}
+
+// EnsureProjectExists checks that a project was found during config loading.
+// Should be called before read operations.
+func (s *Service) EnsureProjectExists() error {
+	if s.config == nil || !s.config.ProjectFound {
+		return ErrNoProjectFound
+	}
+	return nil
+}
+
+// ProjectFound returns whether an existing project was found
+func (s *Service) ProjectFound() bool {
+	return s.config != nil && s.config.ProjectFound
 }
 
 // Initialize loads the index if directory exists (does not create directory)

@@ -3,6 +3,8 @@ package task
 import (
 	"testing"
 	"time"
+
+	"github.com/gpayer/mcp-task-manager/internal/config"
 )
 
 // mockStorage implements Storage interface for testing
@@ -618,6 +620,67 @@ func TestService_GetWithSubtasks_NotFound(t *testing.T) {
 // TestSubtaskLifecycle is a comprehensive integration test covering the full subtask workflow:
 // Create parent -> Create subtasks -> Start subtask (auto-starts parent) -> Complete subtasks
 // -> Parent auto-completes -> Delete protection -> Force delete with cascade
+func TestEnsureProjectExists_NoProject(t *testing.T) {
+	cfg := &config.Config{ProjectFound: false}
+	svc := NewService(nil, nil, nil, cfg)
+
+	err := svc.EnsureProjectExists()
+	if err == nil {
+		t.Error("expected error when ProjectFound=false")
+	}
+	if err != ErrNoProjectFound {
+		t.Errorf("expected ErrNoProjectFound, got %v", err)
+	}
+}
+
+func TestEnsureProjectExists_ProjectExists(t *testing.T) {
+	cfg := &config.Config{ProjectFound: true}
+	svc := NewService(nil, nil, nil, cfg)
+
+	err := svc.EnsureProjectExists()
+	if err != nil {
+		t.Errorf("expected no error when ProjectFound=true, got %v", err)
+	}
+}
+
+func TestEnsureProjectExists_NilConfig(t *testing.T) {
+	svc := NewService(nil, nil, nil, nil)
+
+	err := svc.EnsureProjectExists()
+	if err == nil {
+		t.Error("expected error when config is nil")
+	}
+	if err != ErrNoProjectFound {
+		t.Errorf("expected ErrNoProjectFound, got %v", err)
+	}
+}
+
+func TestProjectFound_NoProject(t *testing.T) {
+	cfg := &config.Config{ProjectFound: false}
+	svc := NewService(nil, nil, nil, cfg)
+
+	if svc.ProjectFound() {
+		t.Error("expected ProjectFound() to return false when ProjectFound=false")
+	}
+}
+
+func TestProjectFound_ProjectExists(t *testing.T) {
+	cfg := &config.Config{ProjectFound: true}
+	svc := NewService(nil, nil, nil, cfg)
+
+	if !svc.ProjectFound() {
+		t.Error("expected ProjectFound() to return true when ProjectFound=true")
+	}
+}
+
+func TestProjectFound_NilConfig(t *testing.T) {
+	svc := NewService(nil, nil, nil, nil)
+
+	if svc.ProjectFound() {
+		t.Error("expected ProjectFound() to return false when config is nil")
+	}
+}
+
 func TestSubtaskLifecycle(t *testing.T) {
 	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	if err := svc.Initialize(); err != nil {
