@@ -26,17 +26,40 @@ func DefaultConfig() *Config {
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
-	// Try to load from config file
-	configPath := "mcp-tasks.yaml"
-	if data, err := os.ReadFile(configPath); err == nil {
-		if err := yaml.Unmarshal(data, cfg); err != nil {
-			return nil, err
-		}
-	}
-
-	// Override data dir from environment
+	// Check for env override first
 	if dir := os.Getenv("MCP_TASKS_DIR"); dir != "" {
 		cfg.DataDir = dir
+		cfg.ProjectFound = true
+		// Try to load config from parent of tasks directory
+		configPath := filepath.Join(dir, "..", "mcp-tasks.yaml")
+		if data, err := os.ReadFile(configPath); err == nil {
+			yaml.Unmarshal(data, cfg)
+		}
+		return cfg, nil
+	}
+
+	// Search for existing project
+	projectRoot, err := FindProjectRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	if projectRoot != "" {
+		cfg.DataDir = filepath.Join(projectRoot, "tasks")
+		cfg.ProjectFound = true
+		// Try to load config from project root
+		configPath := filepath.Join(projectRoot, "mcp-tasks.yaml")
+		if data, err := os.ReadFile(configPath); err == nil {
+			yaml.Unmarshal(data, cfg)
+		}
+	} else {
+		// No project found - use cwd default
+		cfg.DataDir = "./tasks"
+		cfg.ProjectFound = false
+		// Still try to load config from cwd
+		if data, err := os.ReadFile("mcp-tasks.yaml"); err == nil {
+			yaml.Unmarshal(data, cfg)
+		}
 	}
 
 	return cfg, nil
