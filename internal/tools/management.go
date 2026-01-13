@@ -149,6 +149,11 @@ type taskWithSubtasksResponse struct {
 
 func getTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Check project exists for read operation
+		if err := svc.EnsureProjectExists(); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
 		id := req.GetInt("id", 0)
 
 		t, subtasks, err := svc.GetWithSubtasks(id)
@@ -236,6 +241,11 @@ func deleteTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 
 func listTasksHandler(svc *task.Service) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Check project exists for read operation
+		if err := svc.EnsureProjectExists(); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
 		var status *task.Status
 		var priority *task.Priority
 		var taskType *string

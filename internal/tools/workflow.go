@@ -38,6 +38,11 @@ func registerWorkflowTools(s *server.MCPServer, svc *task.Service) {
 
 func getNextTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Check project exists for read operation
+		if err := svc.EnsureProjectExists(); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
 		t := svc.GetNextTask()
 		if t == nil {
 			return mcp.NewToolResultText("No tasks available"), nil
