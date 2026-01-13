@@ -3,6 +3,8 @@ package task
 import (
 	"fmt"
 	"time"
+
+	"github.com/gpayer/mcp-task-manager/internal/config"
 )
 
 // Storage interface for task persistence
@@ -35,22 +37,22 @@ type Service struct {
 	storage    Storage
 	index      Index
 	validTypes []string
+	config     *config.Config
 }
 
 // NewService creates a new task service
-func NewService(storage Storage, index Index, validTypes []string) *Service {
+func NewService(storage Storage, index Index, validTypes []string, cfg *config.Config) *Service {
 	return &Service{
 		storage:    storage,
 		index:      index,
 		validTypes: validTypes,
+		config:     cfg,
 	}
 }
 
-// Initialize loads the index and ensures storage is ready
+// Initialize loads the index if directory exists (does not create directory)
 func (s *Service) Initialize() error {
-	if err := s.storage.EnsureDir(); err != nil {
-		return err
-	}
+	// Only load index, don't create directory - that happens on first write
 	return s.index.Load()
 }
 
@@ -75,6 +77,11 @@ func (s *Service) Create(title, description string, priority Priority, taskType 
 		if parent.ParentID != nil {
 			return nil, fmt.Errorf("cannot create subtask under a subtask (single level only)")
 		}
+	}
+
+	// Ensure directory exists for write operation
+	if err := s.storage.EnsureDir(); err != nil {
+		return nil, err
 	}
 
 	now := time.Now().UTC()

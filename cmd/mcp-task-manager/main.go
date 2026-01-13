@@ -32,7 +32,7 @@ func main() {
 	index := storage.NewIndex(tasksDir, mdStorage)
 
 	// Initialize task service
-	svc := task.NewService(mdStorage, index, cfg.TaskTypes)
+	svc := task.NewService(mdStorage, index, cfg.TaskTypes, cfg)
 	if err := svc.Initialize(); err != nil {
 		log.Fatalf("Failed to initialize service: %v", err)
 	}

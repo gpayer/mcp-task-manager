@@ -36,10 +36,6 @@ func (s *MarkdownStorage) taskPath(id int) string {
 
 // Save writes a task to a markdown file
 func (s *MarkdownStorage) Save(t *task.Task) error {
-	if err := s.EnsureDir(); err != nil {
-		return err
-	}
-
 	// Build frontmatter
 	frontmatter := struct {
 		ID        int           `yaml:"id"`

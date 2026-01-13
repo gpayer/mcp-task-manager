@@ -147,7 +147,7 @@ func (m *mockIndex) SubtaskCounts(parentID int) (total int, done int) {
 }
 
 func TestService_Create(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	if err := svc.Initialize(); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
@@ -168,8 +168,51 @@ func TestService_Create(t *testing.T) {
 	}
 }
 
+// mockStorageWithEnsureDirTracking tracks EnsureDir calls
+type mockStorageWithEnsureDirTracking struct {
+	*mockStorage
+	ensureDirCalled bool
+}
+
+func newMockStorageWithTracking() *mockStorageWithEnsureDirTracking {
+	return &mockStorageWithEnsureDirTracking{
+		mockStorage: newMockStorage(),
+	}
+}
+
+func (m *mockStorageWithEnsureDirTracking) EnsureDir() error {
+	m.ensureDirCalled = true
+	return nil
+}
+
+func TestService_Create_EnsuresDirOnWrite(t *testing.T) {
+	storage := newMockStorageWithTracking()
+	svc := NewService(storage, newMockIndex(), []string{"feature", "bug"}, nil)
+
+	// Initialize should NOT call EnsureDir
+	if err := svc.Initialize(); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+	if storage.ensureDirCalled {
+		t.Error("Initialize() should not call EnsureDir() - directory creation should be deferred to write operations")
+	}
+
+	// Reset tracking
+	storage.ensureDirCalled = false
+
+	// Create should call EnsureDir before writing
+	_, err := svc.Create("Test Task", "Description", PriorityHigh, "feature", nil)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if !storage.ensureDirCalled {
+		t.Error("Create() should call EnsureDir() to ensure directory exists before writing")
+	}
+}
+
 func TestService_Create_Validation(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	tests := []struct {
@@ -196,7 +239,7 @@ func TestService_Create_Validation(t *testing.T) {
 }
 
 func TestService_Update(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	task, _ := svc.Create("Original", "Desc", PriorityMedium, "feature", nil)
@@ -217,7 +260,7 @@ func TestService_Update(t *testing.T) {
 }
 
 func TestService_Delete(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	task, _ := svc.Create("To Delete", "Desc", PriorityMedium, "feature", nil)
@@ -232,7 +275,7 @@ func TestService_Delete(t *testing.T) {
 }
 
 func TestService_TaskWorkflow(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	// Create
@@ -261,7 +304,7 @@ func TestService_TaskWorkflow(t *testing.T) {
 }
 
 func TestService_StartTask_InvalidState(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature", nil)
@@ -277,7 +320,7 @@ func TestService_StartTask_InvalidState(t *testing.T) {
 }
 
 func TestService_CompleteTask_InvalidState(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	task, _ := svc.Create("Test", "Desc", PriorityHigh, "feature", nil)
@@ -290,7 +333,7 @@ func TestService_CompleteTask_InvalidState(t *testing.T) {
 }
 
 func TestService_GetNextTask(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	// Empty
@@ -313,7 +356,7 @@ func TestService_GetNextTask(t *testing.T) {
 }
 
 func TestService_List(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	svc.Create("Task 1", "Desc", PriorityHigh, "feature", nil)
@@ -335,7 +378,7 @@ func TestService_List(t *testing.T) {
 }
 
 func TestService_CreateSubtask(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	// Create parent
@@ -353,7 +396,7 @@ func TestService_CreateSubtask(t *testing.T) {
 }
 
 func TestService_CreateSubtask_InvalidParent(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	// Try to create subtask with non-existent parent
@@ -364,7 +407,7 @@ func TestService_CreateSubtask_InvalidParent(t *testing.T) {
 }
 
 func TestService_CreateSubtask_NestedSubtask(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -378,7 +421,7 @@ func TestService_CreateSubtask_NestedSubtask(t *testing.T) {
 }
 
 func TestService_StartTask_AutoStartsParent(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -398,7 +441,7 @@ func TestService_StartTask_AutoStartsParent(t *testing.T) {
 }
 
 func TestService_StartTask_ParentAlreadyStarted(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -413,7 +456,7 @@ func TestService_StartTask_ParentAlreadyStarted(t *testing.T) {
 }
 
 func TestService_CompleteTask_BlocksIfSubtasksIncomplete(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -430,7 +473,7 @@ func TestService_CompleteTask_BlocksIfSubtasksIncomplete(t *testing.T) {
 }
 
 func TestService_CompleteTask_AutoCompletesParent(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -459,7 +502,7 @@ func TestService_CompleteTask_AutoCompletesParent(t *testing.T) {
 }
 
 func TestService_Delete_BlocksIfHasSubtasks(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -473,7 +516,7 @@ func TestService_Delete_BlocksIfHasSubtasks(t *testing.T) {
 }
 
 func TestService_Delete_ForceDeletesSubtasks(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -495,7 +538,7 @@ func TestService_Delete_ForceDeletesSubtasks(t *testing.T) {
 }
 
 func TestService_Delete_SubtaskAllowed(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	parent, _ := svc.Create("Parent", "Desc", PriorityHigh, "feature", nil)
@@ -509,7 +552,7 @@ func TestService_Delete_SubtaskAllowed(t *testing.T) {
 }
 
 func TestService_GetWithSubtasks(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	// Create parent with subtasks
@@ -541,7 +584,7 @@ func TestService_GetWithSubtasks(t *testing.T) {
 }
 
 func TestService_GetWithSubtasks_NoSubtasks(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	// Create task without subtasks
@@ -562,7 +605,7 @@ func TestService_GetWithSubtasks_NoSubtasks(t *testing.T) {
 }
 
 func TestService_GetWithSubtasks_NotFound(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	svc.Initialize()
 
 	// Get non-existent task
@@ -576,7 +619,7 @@ func TestService_GetWithSubtasks_NotFound(t *testing.T) {
 // Create parent -> Create subtasks -> Start subtask (auto-starts parent) -> Complete subtasks
 // -> Parent auto-completes -> Delete protection -> Force delete with cascade
 func TestSubtaskLifecycle(t *testing.T) {
-	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"})
+	svc := NewService(newMockStorage(), newMockIndex(), []string{"feature", "bug"}, nil)
 	if err := svc.Initialize(); err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
