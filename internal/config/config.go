@@ -9,8 +9,9 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	TaskTypes []string `yaml:"task_types"`
-	DataDir   string   `yaml:"-"` // Set from env or default
+	TaskTypes    []string `yaml:"task_types"`
+	DataDir      string   `yaml:"-"` // Set from env or default
+	ProjectFound bool     `yaml:"-"` // Whether an existing project was discovered
 }
 
 // DefaultConfig returns configuration with defaults
@@ -58,4 +59,35 @@ func (c *Config) IsValidTaskType(t string) bool {
 		}
 	}
 	return false
+}
+
+// FindProjectRoot searches for an existing project root by looking for
+// mcp-tasks.yaml or a tasks directory, starting from cwd and moving up.
+// Returns the directory containing the config/tasks, or empty string if not found.
+func FindProjectRoot() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	dir := cwd
+	for {
+		// First priority: mcp-tasks.yaml
+		if _, err := os.Stat(filepath.Join(dir, "mcp-tasks.yaml")); err == nil {
+			return dir, nil
+		}
+
+		// Second priority: tasks directory
+		if info, err := os.Stat(filepath.Join(dir, "tasks")); err == nil && info.IsDir() {
+			return dir, nil
+		}
+
+		// Move to parent
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root
+			return "", nil
+		}
+		dir = parent
+	}
 }

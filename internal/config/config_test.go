@@ -83,3 +83,158 @@ func TestLoad_WithEnvOverride(t *testing.T) {
 		t.Errorf("Load() DataDir = %q, want %q", cfg.DataDir, "/custom/path")
 	}
 }
+
+func TestFindProjectRoot_ConfigFile(t *testing.T) {
+	// Create temp directory structure with mcp-tasks.yaml
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "sub", "deep")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("failed to create subdirs: %v", err)
+	}
+
+	// Create config file in tmpDir
+	configPath := filepath.Join(tmpDir, "mcp-tasks.yaml")
+	if err := os.WriteFile(configPath, []byte("task_types:\n  - feature\n"), 0644); err != nil {
+		t.Fatalf("failed to create config file: %v", err)
+	}
+
+	// Save and restore cwd
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+
+	// Change to deep subdirectory
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	root, err := FindProjectRoot()
+	if err != nil {
+		t.Fatalf("FindProjectRoot() error = %v", err)
+	}
+
+	if root != tmpDir {
+		t.Errorf("FindProjectRoot() = %q, want %q", root, tmpDir)
+	}
+}
+
+func TestFindProjectRoot_TasksDirectory(t *testing.T) {
+	// Create temp directory structure with tasks/ directory (no config file)
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "sub", "deep")
+	tasksDir := filepath.Join(tmpDir, "tasks")
+
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("failed to create subdirs: %v", err)
+	}
+	if err := os.MkdirAll(tasksDir, 0755); err != nil {
+		t.Fatalf("failed to create tasks dir: %v", err)
+	}
+
+	// Save and restore cwd
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+
+	// Change to deep subdirectory
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	root, err := FindProjectRoot()
+	if err != nil {
+		t.Fatalf("FindProjectRoot() error = %v", err)
+	}
+
+	if root != tmpDir {
+		t.Errorf("FindProjectRoot() = %q, want %q", root, tmpDir)
+	}
+}
+
+func TestFindProjectRoot_ConfigFilePreferredOverTasksDir(t *testing.T) {
+	// Create two levels: one with tasks/, parent with mcp-tasks.yaml
+	// Should find the one with config file first (it's higher priority at same level)
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "sub")
+
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("failed to create subdirs: %v", err)
+	}
+
+	// Create both: config file and tasks dir at same level (config should win)
+	configPath := filepath.Join(subDir, "mcp-tasks.yaml")
+	tasksDir := filepath.Join(subDir, "tasks")
+
+	if err := os.WriteFile(configPath, []byte("task_types:\n  - feature\n"), 0644); err != nil {
+		t.Fatalf("failed to create config file: %v", err)
+	}
+	if err := os.MkdirAll(tasksDir, 0755); err != nil {
+		t.Fatalf("failed to create tasks dir: %v", err)
+	}
+
+	// Save and restore cwd
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	root, err := FindProjectRoot()
+	if err != nil {
+		t.Fatalf("FindProjectRoot() error = %v", err)
+	}
+
+	// Should find subDir (where both exist) - config file is checked first
+	if root != subDir {
+		t.Errorf("FindProjectRoot() = %q, want %q", root, subDir)
+	}
+}
+
+func TestFindProjectRoot_NotFound(t *testing.T) {
+	// Create temp directory with nothing
+	tmpDir := t.TempDir()
+
+	// Save and restore cwd
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	root, err := FindProjectRoot()
+	if err != nil {
+		t.Fatalf("FindProjectRoot() error = %v", err)
+	}
+
+	if root != "" {
+		t.Errorf("FindProjectRoot() = %q, want empty string", root)
+	}
+}
+
+func TestFindProjectRoot_InProjectRoot(t *testing.T) {
+	// When already in project root, should return that directory
+	tmpDir := t.TempDir()
+
+	// Create config file in tmpDir
+	configPath := filepath.Join(tmpDir, "mcp-tasks.yaml")
+	if err := os.WriteFile(configPath, []byte("task_types:\n  - feature\n"), 0644); err != nil {
+		t.Fatalf("failed to create config file: %v", err)
+	}
+
+	// Save and restore cwd
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	root, err := FindProjectRoot()
+	if err != nil {
+		t.Fatalf("FindProjectRoot() error = %v", err)
+	}
+
+	if root != tmpDir {
+		t.Errorf("FindProjectRoot() = %q, want %q", root, tmpDir)
+	}
+}
