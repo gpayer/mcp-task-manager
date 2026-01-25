@@ -134,8 +134,24 @@ func (idx *Index) Save() error {
 		return err
 	}
 
-	tasks := idx.All()
-	data, err := json.MarshalIndent(tasks, "", "  ")
+	// Get current git commit
+	gitCommit, _ := getGitCommit(idx.dir)
+
+	// Build entries slice sorted by ID
+	entries := make([]*IndexEntry, 0, len(idx.entries))
+	for _, e := range idx.entries {
+		entries = append(entries, e)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].ID < entries[j].ID
+	})
+
+	indexFile := IndexFile{
+		GitCommit: gitCommit,
+		Tasks:     entries,
+	}
+
+	data, err := json.MarshalIndent(indexFile, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -151,21 +167,30 @@ func (idx *Index) Save() error {
 func (idx *Index) Load() error {
 	data, err := os.ReadFile(idx.indexPath())
 	if err != nil {
-		// Index missing, rebuild from files
+		return idx.Rebuild() // Missing index
+	}
+
+	var indexFile IndexFile
+	if err := json.Unmarshal(data, &indexFile); err != nil {
+		return idx.Rebuild() // Corrupt or old format index
+	}
+
+	// Check git commit - rebuild if stale
+	currentCommit, _ := getGitCommit(idx.dir)
+	if currentCommit != "" && indexFile.GitCommit != currentCommit {
+		return idx.Rebuild() // Stale index (git changed)
+	}
+
+	// Empty commit in file with non-empty current = stale (migration case)
+	if currentCommit != "" && indexFile.GitCommit == "" {
 		return idx.Rebuild()
 	}
 
-	var tasks []*task.Task
-	if err := json.Unmarshal(data, &tasks); err != nil {
-		// Index corrupt, rebuild from files
-		return idx.Rebuild()
-	}
-
+	// Load entries into memory
 	idx.entries = make(map[int]*IndexEntry)
-	for _, t := range tasks {
-		idx.entries[t.ID] = taskToEntry(t)
+	for _, e := range indexFile.Tasks {
+		idx.entries[e.ID] = e
 	}
-
 	return nil
 }
 
