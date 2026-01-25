@@ -3,11 +3,79 @@ package storage
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/gpayer/mcp-task-manager/internal/task"
 )
+
+// getGitCommit walks up from dir to find .git directory and returns current commit hash
+// Returns empty string if not a git repo
+func getGitCommit(dir string) (string, error) {
+	// Walk up to find .git directory
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+
+	currentDir := absDir
+	for {
+		gitDir := filepath.Join(currentDir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			// Found .git directory, run git rev-parse HEAD
+			cmd := exec.Command("git", "rev-parse", "HEAD")
+			cmd.Dir = currentDir
+			output, err := cmd.Output()
+			if err != nil {
+				return "", nil // Not a valid git repo or no commits yet
+			}
+			return strings.TrimSpace(string(output)), nil
+		}
+
+		// Move up one directory
+		parent := filepath.Dir(currentDir)
+		if parent == currentDir {
+			// Reached root without finding .git
+			return "", nil
+		}
+		currentDir = parent
+	}
+}
+
+// IndexEntry contains task metadata without description (stored in index)
+type IndexEntry struct {
+	ID        int           `json:"id"`
+	ParentID  *int          `json:"parent_id,omitempty"`
+	Title     string        `json:"title"`
+	Status    task.Status   `json:"status"`
+	Priority  task.Priority `json:"priority"`
+	Type      string        `json:"type"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
+}
+
+// IndexFile is the on-disk format for the index
+type IndexFile struct {
+	GitCommit string        `json:"git_commit"`
+	Tasks     []*IndexEntry `json:"tasks"`
+}
+
+// taskToEntry converts a Task to an IndexEntry
+func taskToEntry(t *task.Task) *IndexEntry {
+	return &IndexEntry{
+		ID:        t.ID,
+		ParentID:  t.ParentID,
+		Title:     t.Title,
+		Status:    t.Status,
+		Priority:  t.Priority,
+		Type:      t.Type,
+		CreatedAt: t.CreatedAt,
+		UpdatedAt: t.UpdatedAt,
+	}
+}
 
 // Index is an in-memory cache of all tasks
 type Index struct {

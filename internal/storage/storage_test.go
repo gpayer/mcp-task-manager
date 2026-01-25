@@ -659,3 +659,28 @@ func TestIndex_Filter_ByParentID(t *testing.T) {
 		t.Errorf("Filter(parent_id=nil) = %d, want 4", len(result))
 	}
 }
+
+func TestGetGitCommit(t *testing.T) {
+	// Test in non-git directory
+	dir := t.TempDir()
+	commit, err := getGitCommit(dir)
+	if err != nil {
+		t.Fatalf("getGitCommit() in non-git dir error = %v", err)
+	}
+	if commit != "" {
+		t.Errorf("getGitCommit() in non-git dir = %q, want empty", commit)
+	}
+
+	// Test in git directory (use the actual project dir)
+	// The test is running inside a git repo, so cwd should work
+	commit, err = getGitCommit(".")
+	if err != nil {
+		t.Fatalf("getGitCommit() error = %v", err)
+	}
+	if commit == "" {
+		t.Error("getGitCommit() in git repo returned empty string")
+	}
+	if len(commit) != 40 {
+		t.Errorf("getGitCommit() returned %q, want 40-char SHA", commit)
+	}
+}
