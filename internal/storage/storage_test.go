@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -994,5 +995,96 @@ func TestIndex_Load_MigratesOldFormat(t *testing.T) {
 	}
 	if e.Status != task.StatusTodo {
 		t.Errorf("Status = %q, want 'todo' (from file)", e.Status)
+	}
+}
+
+func TestIndex_Integration_FullFlow(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+
+	// Create tasks with descriptions
+	task1 := &task.Task{
+		ID:          1,
+		Title:       "Task 1",
+		Description: "Long description for task 1 that should NOT be in index",
+		Status:      task.StatusTodo,
+		Priority:    task.PriorityHigh,
+		Type:        "feature",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	task2 := &task.Task{
+		ID:          2,
+		Title:       "Task 2",
+		Description: "Another long description",
+		Status:      task.StatusDone,
+		Priority:    task.PriorityLow,
+		Type:        "bug",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	// Save to both storage and index
+	if err := storage.Save(task1); err != nil {
+		t.Fatalf("storage.Save() error = %v", err)
+	}
+	if err := storage.Save(task2); err != nil {
+		t.Fatalf("storage.Save() error = %v", err)
+	}
+	idx.Set(task1)
+	idx.Set(task2)
+	if err := idx.Save(); err != nil {
+		t.Fatalf("idx.Save() error = %v", err)
+	}
+
+	// Read index file and verify no descriptions
+	data, err := os.ReadFile(filepath.Join(dir, ".index.json"))
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+	if strings.Contains(string(data), "Long description") {
+		t.Error("Index file should NOT contain task descriptions")
+	}
+	if strings.Contains(string(data), "Another long description") {
+		t.Error("Index file should NOT contain task descriptions")
+	}
+
+	// Load fresh index
+	idx2 := NewIndex(dir, storage)
+	if err := idx2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// All() should return tasks without descriptions
+	all := idx2.All()
+	if len(all) != 2 {
+		t.Fatalf("All() returned %d tasks, want 2", len(all))
+	}
+	for _, tk := range all {
+		if tk.Description != "" {
+			t.Errorf("All() task %d has description %q, want empty", tk.ID, tk.Description)
+		}
+	}
+
+	// Get() should return full task with description
+	full, ok := idx2.Get(1)
+	if !ok {
+		t.Fatal("Get(1) returned false")
+	}
+	if full.Description != "Long description for task 1 that should NOT be in index" {
+		t.Errorf("Get(1) description = %q, want full description", full.Description)
+	}
+
+	// Filter() should return tasks without descriptions
+	todoStatus := task.StatusTodo
+	filtered := idx2.Filter(&todoStatus, nil, nil, nil)
+	if len(filtered) != 1 {
+		t.Fatalf("Filter() returned %d tasks, want 1", len(filtered))
+	}
+	if filtered[0].Description != "" {
+		t.Errorf("Filter() task has description %q, want empty", filtered[0].Description)
 	}
 }
