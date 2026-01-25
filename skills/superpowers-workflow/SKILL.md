@@ -27,7 +27,7 @@ digraph workflow {
     "Is subtask?" [shape=diamond];
     "Has subtasks?" [shape=diamond];
     "start_task" [shape=box];
-    "PLANNING PHASE" [shape=box style=filled fillcolor=lightyellow];
+    "PLANNING SUBAGENT (opus)" [shape=box style=filled fillcolor=lightyellow];
     "EXECUTION PHASE" [shape=box style=filled fillcolor=lightgreen];
 
     "get_next_task" -> "No tasks?";
@@ -37,9 +37,9 @@ digraph workflow {
     "Is subtask?" -> "Has subtasks?" [label="no (parent)"];
     "Has subtasks?" -> "start_task" [label="yes - skip to execution"];
     "Has subtasks?" -> "start_task" [label="no - needs planning"];
-    "start_task" -> "PLANNING PHASE" [label="parent without subtasks"];
+    "start_task" -> "PLANNING SUBAGENT (opus)" [label="parent without subtasks"];
     "start_task" -> "EXECUTION PHASE" [label="subtask or parent with subtasks"];
-    "PLANNING PHASE" -> "EXECUTION PHASE";
+    "PLANNING SUBAGENT (opus)" -> "EXECUTION PHASE";
     "EXECUTION PHASE" -> "get_next_task" [label="subtask complete"];
 }
 ```
@@ -58,25 +58,41 @@ digraph workflow {
 
 ### Phase 2: Planning (parent tasks without subtasks)
 
-**Goal:** Decompose the parent task into executable subtasks.
+**Goal:** Decompose the parent task into executable subtasks using an Opus subagent.
 
-1. Call `mcp__task-manager__start_task` with the parent task ID
-2. Read relevant codebase files to understand context
-3. Use AskUserQuestion if requirements are unclear
-4. For each implementation task in your plan, call `mcp__task-manager__create_task`:
+#### Step 1: Start Parent Task
+
+Call `mcp__task-manager__start_task` with the parent task ID (main agent does this before dispatch).
+
+#### Step 2: Dispatch Planning Subagent
+
+Launch a Task tool subagent with:
+
+```
+Plan subtasks for Task #{id}: {title}
+Priority: {priority}
+Type: {type}
+
+Description:
+{parent task description}
+
+---
+Instructions:
+1. Read relevant codebase files to understand context
+2. Use AskUserQuestion if requirements are unclear
+3. For each implementation task in your plan, call `mcp__task-manager__create_task`:
    - `title`: "Task N: [Component/Action]"
    - `description`: Full task spec (see format below)
-   - `priority`: same as parent
-   - `type`: same as parent
-   - `parent_id`: the parent task ID
+   - `priority`: {priority} (same as parent)
+   - `type`: {type} (same as parent)
+   - `parent_id`: {id}
 
-5. After creating all subtasks, proceed to Phase 3
+4. Report the subtasks you created
 
-#### Subtask Description Format
+### Subtask Description Format
 
 Each subtask description must be self-contained. Include:
 
-```markdown
 **Files:**
 - Create: `exact/path/to/file.ext`
 - Modify: `exact/path/to/existing.ext`
@@ -94,15 +110,23 @@ Each subtask description must be self-contained. Include:
 
 **Verification:**
 `[exact verification command]`
-```
 
-#### Planning Guidelines
+### Planning Guidelines
 
 - Design tasks to fit in subtask descriptions
 - External files only for large examples/data (create in `docs/examples/` if needed)
 - Each task should be completable by one subagent session
 - Include everything the implementer needs - they have no other context
 - Follow DRY, YAGNI, TDD principles
+```
+
+Use `subagent_type: general-purpose` and `model: opus`.
+
+#### Step 3: Verify and Proceed
+
+After the planning subagent returns:
+1. Verify subtasks were created (subagent reports what it created)
+2. Proceed to Phase 3 (Execution)
 
 ### Phase 3: Execution
 
@@ -228,12 +252,13 @@ Task #7: Add user authentication (priority: high, no subtasks)
 [Calls start_task(7)]
 Task #7 is now in_progress. No subtasks exist, entering planning phase.
 
-Analyzing requirements and creating implementation plan...
+Dispatching planning subagent (opus) to decompose task...
 
-[Creates subtasks]
-- Created Task #8: "Task 1: Add User model" (parent: #7)
-- Created Task #9: "Task 2: Add authentication middleware" (parent: #7)
-- Created Task #10: "Task 3: Add login endpoint" (parent: #7)
+[Planning subagent creates subtasks]
+Planning subagent: Created 3 subtasks:
+- Task #8: "Task 1: Add User model" (parent: #7)
+- Task #9: "Task 2: Add authentication middleware" (parent: #7)
+- Task #10: "Task 3: Add login endpoint" (parent: #7)
 
 Planning complete. 3 subtasks created. Starting execution.
 
