@@ -20,18 +20,24 @@ type Storage interface {
 }
 
 // Index interface for task indexing
+//
+// Performance note: Methods returning []*Task use lazy loading:
+//   - Get() loads the full task with description from disk
+//   - Filter(), All(), GetSubtasks(), NextTodo() return tasks without descriptions (from in-memory index)
+//
+// This design keeps list operations fast while still providing full task data on demand.
 type Index interface {
 	Load() error
 	Save() error
-	Get(id int) (*Task, bool)
+	Get(id int) (*Task, bool) // Loads full task with description from disk
 	Set(t *Task)
 	Delete(id int)
-	All() []*Task
-	Filter(status *Status, priority *Priority, taskType *string, parentID *int) []*Task
-	NextTodo() *Task
+	All() []*Task                                                                       // Returns tasks without descriptions (from index)
+	Filter(status *Status, priority *Priority, taskType *string, parentID *int) []*Task // Returns tasks without descriptions
+	NextTodo() *Task                                                                    // Returns task without description (from index)
 	NextID() int
 	// Subtask methods
-	GetSubtasks(parentID int) []*Task
+	GetSubtasks(parentID int) []*Task // Returns tasks without descriptions (from index)
 	HasSubtasks(taskID int) bool
 	SubtaskCounts(parentID int) (total int, done int)
 }
@@ -132,7 +138,7 @@ func (s *Service) CreateSubtask(title, description string, priority Priority, ta
 	return s.Create(title, description, priority, taskType, &parentID)
 }
 
-// Get returns a task by ID
+// Get returns a task by ID with full description loaded from disk
 func (s *Service) Get(id int) (*Task, error) {
 	t, ok := s.index.Get(id)
 	if !ok {
@@ -238,11 +244,13 @@ func (s *Service) Delete(id int, deleteSubtasks bool) error {
 }
 
 // List returns all tasks, optionally filtered
+// Note: Tasks returned do not include descriptions for performance (use Get for full task data)
 func (s *Service) List(status *Status, priority *Priority, taskType *string, parentID *int) []*Task {
 	return s.index.Filter(status, priority, taskType, parentID)
 }
 
 // GetNextTask returns the highest priority todo task
+// Note: Task returned does not include description (use Get to load full task data)
 func (s *Service) GetNextTask() *Task {
 	return s.index.NextTodo()
 }
