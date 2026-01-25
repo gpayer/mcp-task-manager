@@ -77,9 +77,24 @@ func taskToEntry(t *task.Task) *IndexEntry {
 	}
 }
 
+// entryToTask converts an IndexEntry back to a Task (without description)
+func entryToTask(e *IndexEntry) *task.Task {
+	return &task.Task{
+		ID:        e.ID,
+		ParentID:  e.ParentID,
+		Title:     e.Title,
+		Status:    e.Status,
+		Priority:  e.Priority,
+		Type:      e.Type,
+		CreatedAt: e.CreatedAt,
+		UpdatedAt: e.UpdatedAt,
+		// Description intentionally empty
+	}
+}
+
 // Index is an in-memory cache of all tasks
 type Index struct {
-	tasks   map[int]*task.Task
+	entries map[int]*IndexEntry
 	dir     string
 	storage *MarkdownStorage
 }
@@ -87,7 +102,7 @@ type Index struct {
 // NewIndex creates a new index for the given directory
 func NewIndex(dir string, storage *MarkdownStorage) *Index {
 	return &Index{
-		tasks:   make(map[int]*task.Task),
+		entries: make(map[int]*IndexEntry),
 		dir:     dir,
 		storage: storage,
 	}
@@ -105,9 +120,9 @@ func (idx *Index) Rebuild() error {
 		return err
 	}
 
-	idx.tasks = make(map[int]*task.Task)
+	idx.entries = make(map[int]*IndexEntry)
 	for _, t := range tasks {
-		idx.tasks[t.ID] = t
+		idx.entries[t.ID] = taskToEntry(t)
 	}
 
 	return idx.Save()
@@ -146,35 +161,47 @@ func (idx *Index) Load() error {
 		return idx.Rebuild()
 	}
 
-	idx.tasks = make(map[int]*task.Task)
+	idx.entries = make(map[int]*IndexEntry)
 	for _, t := range tasks {
-		idx.tasks[t.ID] = t
+		idx.entries[t.ID] = taskToEntry(t)
 	}
 
 	return nil
 }
 
-// Get returns a task by ID
+// GetEntry returns an entry by ID (metadata only, no description)
+func (idx *Index) GetEntry(id int) (*IndexEntry, bool) {
+	e, ok := idx.entries[id]
+	return e, ok
+}
+
+// Get returns a full task by ID (loads description from disk)
 func (idx *Index) Get(id int) (*task.Task, bool) {
-	t, ok := idx.tasks[id]
-	return t, ok
+	if _, ok := idx.entries[id]; !ok {
+		return nil, false
+	}
+	t, err := idx.storage.Load(id)
+	if err != nil {
+		return nil, false
+	}
+	return t, true
 }
 
 // Set adds or updates a task in the index
 func (idx *Index) Set(t *task.Task) {
-	idx.tasks[t.ID] = t
+	idx.entries[t.ID] = taskToEntry(t)
 }
 
 // Delete removes a task from the index
 func (idx *Index) Delete(id int) {
-	delete(idx.tasks, id)
+	delete(idx.entries, id)
 }
 
 // All returns all tasks sorted by ID
 func (idx *Index) All() []*task.Task {
-	tasks := make([]*task.Task, 0, len(idx.tasks))
-	for _, t := range idx.tasks {
-		tasks = append(tasks, t)
+	tasks := make([]*task.Task, 0, len(idx.entries))
+	for _, e := range idx.entries {
+		tasks = append(tasks, entryToTask(e))
 	}
 	sort.Slice(tasks, func(i, j int) bool {
 		return tasks[i].ID < tasks[j].ID
@@ -186,30 +213,30 @@ func (idx *Index) All() []*task.Task {
 // parentID: nil = all tasks, 0 = top-level only, >0 = subtasks of that parent
 func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType *string, parentID *int) []*task.Task {
 	var result []*task.Task
-	for _, t := range idx.tasks {
-		if status != nil && t.Status != *status {
+	for _, e := range idx.entries {
+		if status != nil && e.Status != *status {
 			continue
 		}
-		if priority != nil && t.Priority != *priority {
+		if priority != nil && e.Priority != *priority {
 			continue
 		}
-		if taskType != nil && t.Type != *taskType {
+		if taskType != nil && e.Type != *taskType {
 			continue
 		}
 		if parentID != nil {
 			if *parentID == 0 {
 				// Top-level only
-				if t.ParentID != nil {
+				if e.ParentID != nil {
 					continue
 				}
 			} else {
 				// Subtasks of specific parent
-				if t.ParentID == nil || *t.ParentID != *parentID {
+				if e.ParentID == nil || *e.ParentID != *parentID {
 					continue
 				}
 			}
 		}
-		result = append(result, t)
+		result = append(result, entryToTask(e))
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ID < result[j].ID
@@ -226,24 +253,24 @@ func (idx *Index) NextTodo() *task.Task {
 	var inProgressSubtasks []*task.Task
 	var otherCandidates []*task.Task
 
-	for _, t := range idx.tasks {
-		if t.Status != task.StatusTodo {
+	for _, e := range idx.entries {
+		if e.Status != task.StatusTodo {
 			continue
 		}
 		// Skip parents that have subtasks
-		if idx.HasSubtasks(t.ID) {
+		if idx.HasSubtasks(e.ID) {
 			continue
 		}
 
 		// Check if this is a subtask of an in_progress parent
-		if t.ParentID != nil {
-			if parent, ok := idx.Get(*t.ParentID); ok && parent.Status == task.StatusInProgress {
-				inProgressSubtasks = append(inProgressSubtasks, t)
+		if e.ParentID != nil {
+			if parent, ok := idx.GetEntry(*e.ParentID); ok && parent.Status == task.StatusInProgress {
+				inProgressSubtasks = append(inProgressSubtasks, entryToTask(e))
 				continue
 			}
 		}
 
-		otherCandidates = append(otherCandidates, t)
+		otherCandidates = append(otherCandidates, entryToTask(e))
 	}
 
 	// Sort function: by priority (lower order = higher priority), then by creation date
@@ -273,7 +300,7 @@ func (idx *Index) NextTodo() *task.Task {
 // NextID returns the next available task ID
 func (idx *Index) NextID() int {
 	maxID := 0
-	for id := range idx.tasks {
+	for id := range idx.entries {
 		if id > maxID {
 			maxID = id
 		}
@@ -284,9 +311,9 @@ func (idx *Index) NextID() int {
 // GetSubtasks returns all subtasks of a parent task
 func (idx *Index) GetSubtasks(parentID int) []*task.Task {
 	var result []*task.Task
-	for _, t := range idx.tasks {
-		if t.ParentID != nil && *t.ParentID == parentID {
-			result = append(result, t)
+	for _, e := range idx.entries {
+		if e.ParentID != nil && *e.ParentID == parentID {
+			result = append(result, entryToTask(e))
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -297,8 +324,8 @@ func (idx *Index) GetSubtasks(parentID int) []*task.Task {
 
 // HasSubtasks returns true if the task has any subtasks
 func (idx *Index) HasSubtasks(taskID int) bool {
-	for _, t := range idx.tasks {
-		if t.ParentID != nil && *t.ParentID == taskID {
+	for _, e := range idx.entries {
+		if e.ParentID != nil && *e.ParentID == taskID {
 			return true
 		}
 	}
@@ -307,10 +334,10 @@ func (idx *Index) HasSubtasks(taskID int) bool {
 
 // SubtaskCounts returns (total, done) counts for a parent task
 func (idx *Index) SubtaskCounts(parentID int) (total int, done int) {
-	for _, t := range idx.tasks {
-		if t.ParentID != nil && *t.ParentID == parentID {
+	for _, e := range idx.entries {
+		if e.ParentID != nil && *e.ParentID == parentID {
 			total++
-			if t.Status == task.StatusDone {
+			if e.Status == task.StatusDone {
 				done++
 			}
 		}

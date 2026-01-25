@@ -163,6 +163,11 @@ func TestIndex_SetGetDelete(t *testing.T) {
 		UpdatedAt: now,
 	}
 
+	// Save to disk first (required for Get to work)
+	if err := storage.Save(tk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
 	// Set
 	idx.Set(tk)
 
@@ -292,6 +297,12 @@ func TestIndex_SaveAndLoad(t *testing.T) {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
+
+	// Save to disk first (required for Get to work)
+	if err := storage.Save(tk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
 	idx.Set(tk)
 
 	if err := idx.Save(); err != nil {
@@ -565,7 +576,10 @@ func TestIndex_NextTodo_PrioritizesInProgressParentSubtasks(t *testing.T) {
 	}
 
 	// Complete the high priority subtask
-	idx.tasks[3].Status = task.StatusDone
+	entry3, _ := idx.GetEntry(3)
+	completedTask3 := entryToTask(entry3)
+	completedTask3.Status = task.StatusDone
+	idx.Set(completedTask3)
 
 	// Now should return low priority subtask of in_progress parent
 	next = idx.NextTodo()
@@ -577,7 +591,10 @@ func TestIndex_NextTodo_PrioritizesInProgressParentSubtasks(t *testing.T) {
 	}
 
 	// Complete the low priority subtask too
-	idx.tasks[2].Status = task.StatusDone
+	entry2, _ := idx.GetEntry(2)
+	completedTask2 := entryToTask(entry2)
+	completedTask2.Status = task.StatusDone
+	idx.Set(completedTask2)
 
 	// Now should return the critical standalone
 	next = idx.NextTodo()
@@ -682,5 +699,139 @@ func TestGetGitCommit(t *testing.T) {
 	}
 	if len(commit) != 40 {
 		t.Errorf("getGitCommit() returned %q, want 40-char SHA", commit)
+	}
+}
+
+// Test that GetEntry returns metadata without loading from disk
+func TestIndex_GetEntry_ReturnsMetadataOnly(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	tk := &task.Task{
+		ID:          1,
+		Title:       "Test Task",
+		Description: "This description should not be in the entry",
+		Status:      task.StatusTodo,
+		Priority:    task.PriorityHigh,
+		Type:        "feature",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	// Set the task in the index
+	idx.Set(tk)
+
+	// GetEntry should return entry with metadata but no description
+	entry, ok := idx.GetEntry(1)
+	if !ok {
+		t.Fatal("GetEntry() returned false for existing task")
+	}
+	if entry.ID != 1 {
+		t.Errorf("entry.ID = %d, want 1", entry.ID)
+	}
+	if entry.Title != "Test Task" {
+		t.Errorf("entry.Title = %q, want %q", entry.Title, "Test Task")
+	}
+	if entry.Status != task.StatusTodo {
+		t.Errorf("entry.Status = %v, want %v", entry.Status, task.StatusTodo)
+	}
+
+	// GetEntry should return false for non-existent task
+	_, ok = idx.GetEntry(999)
+	if ok {
+		t.Error("GetEntry() returned true for non-existent task")
+	}
+}
+
+// Test that Get loads full task from disk (with description)
+func TestIndex_Get_LoadsFromDisk(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	tk := &task.Task{
+		ID:          1,
+		Title:       "Test Task",
+		Description: "Full description from disk",
+		Status:      task.StatusTodo,
+		Priority:    task.PriorityHigh,
+		Type:        "feature",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	// Save to disk
+	if err := storage.Save(tk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Set in index (this should store entry, not full task)
+	idx.Set(tk)
+
+	// Get should load from disk and include description
+	loaded, ok := idx.Get(1)
+	if !ok {
+		t.Fatal("Get() returned false for existing task")
+	}
+	if loaded.Description != "Full description from disk" {
+		t.Errorf("Get() description = %q, want %q", loaded.Description, "Full description from disk")
+	}
+	if loaded.Title != "Test Task" {
+		t.Errorf("Get() title = %q, want %q", loaded.Title, "Test Task")
+	}
+}
+
+// Test that All returns tasks without descriptions
+func TestIndex_All_ReturnsTasksWithoutDescriptions(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	tk1 := &task.Task{
+		ID:          1,
+		Title:       "Task 1",
+		Description: "Description 1",
+		Status:      task.StatusTodo,
+		Priority:    task.PriorityHigh,
+		Type:        "feature",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	tk2 := &task.Task{
+		ID:          2,
+		Title:       "Task 2",
+		Description: "Description 2",
+		Status:      task.StatusDone,
+		Priority:    task.PriorityLow,
+		Type:        "bug",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	idx.Set(tk1)
+	idx.Set(tk2)
+
+	all := idx.All()
+	if len(all) != 2 {
+		t.Errorf("All() returned %d tasks, want 2", len(all))
+	}
+
+	// Descriptions should be empty
+	for _, tk := range all {
+		if tk.Description != "" {
+			t.Errorf("All() task %d has description %q, want empty", tk.ID, tk.Description)
+		}
+	}
+
+	// Other fields should be populated
+	if all[0].Title != "Task 1" {
+		t.Errorf("All() task 1 title = %q, want %q", all[0].Title, "Task 1")
+	}
+	if all[1].Title != "Task 2" {
+		t.Errorf("All() task 2 title = %q, want %q", all[1].Title, "Task 2")
 	}
 }
