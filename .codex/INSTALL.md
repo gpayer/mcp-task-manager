@@ -28,7 +28,6 @@ Install the skill and command from this repository so Codex can discover and use
 ## Verify
 ```bash
 ls -la ~/.agents/skills/mcp-task-manager
-ls -la ~/.codex/commands/execute-all.md
 ```
 You should see symlinks (or junctions on Windows) pointing into `~/.codex/mcp-task-manager`.
 
@@ -41,7 +40,6 @@ Updates are immediate through the symlinks.
 ## Uninstalling
 ```bash
 rm ~/.agents/skills/mcp-task-manager
-rm ~/.codex/commands/execute-all.md
 ```
 Optionally delete the clone:
 ```bash
