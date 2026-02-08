@@ -14,28 +14,16 @@ Install the skill and command from this repository so Codex can discover and use
 2. **Link the skill for Codex discovery:**
    ```bash
    mkdir -p ~/.agents/skills
-   ln -s ~/.codex/mcp-task-manager/skills/superpowers-workflow ~/.agents/skills/mcp-task-manager
+   ln -s ~/.codex/mcp-task-manager/skills ~/.agents/skills/mcp-task-manager
    ```
 
    **Windows (PowerShell):**
    ```powershell
    New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.agents\skills"
-   cmd /c mklink /J "$env:USERPROFILE\.agents\skills\mcp-task-manager" "$env:USERPROFILE\.codex\mcp-task-manager\skills\superpowers-workflow"
+   cmd /c mklink /J "$env:USERPROFILE\.agents\skills\mcp-task-manager" "$env:USERPROFILE\.codex\mcp-task-manager\skills"
    ```
 
-3. **Link the command:**
-   ```bash
-   mkdir -p ~/.codex/commands
-   ln -s ~/.codex/mcp-task-manager/commands/execute-all.md ~/.codex/commands/execute-all.md
-   ```
-
-   **Windows (PowerShell):**
-   ```powershell
-   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.codex\commands"
-   cmd /c mklink /J "$env:USERPROFILE\.codex\commands\execute-all.md" "$env:USERPROFILE\.codex\mcp-task-manager\commands\execute-all.md"
-   ```
-
-4. **Restart Codex** to pick up the new skill and command.
+4. **Restart Codex** to pick up the new skill.
 
 ## Verify
 ```bash
