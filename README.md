@@ -155,7 +155,7 @@ Use the `/mcp-task-manager:superpowers-workflow` skill to automatically execute 
 **Add the MCP server:**
 
 ```bash
-codex mcp add --transport stdio task-manager -- mcp-task-manager
+codex mcp add task-manager -- mcp-task-manager
 ```
 
 **Paste into Codex to install the skill and command:**
