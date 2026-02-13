@@ -135,16 +135,19 @@ func createTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 
 // taskWithSubtasksResponse is the response structure for get_task
 type taskWithSubtasksResponse struct {
-	ID          int           `json:"id"`
-	ParentID    *int          `json:"parent_id,omitempty"`
-	Title       string        `json:"title"`
-	Description string        `json:"description"`
-	Status      task.Status   `json:"status"`
-	Priority    task.Priority `json:"priority"`
-	Type        string        `json:"type"`
-	CreatedAt   string        `json:"created_at"`
-	UpdatedAt   string        `json:"updated_at"`
-	Subtasks    []*task.Task  `json:"subtasks,omitempty"`
+	ID          int                 `json:"id"`
+	ParentID    *int                `json:"parent_id,omitempty"`
+	Title       string              `json:"title"`
+	Description string              `json:"description"`
+	Status      task.Status         `json:"status"`
+	Priority    task.Priority       `json:"priority"`
+	Type        string              `json:"type"`
+	Relations   []task.Relation     `json:"relations,omitempty"`
+	Blocked     bool                `json:"blocked"`
+	BlockedBy   []task.BlockingInfo `json:"blocked_by,omitempty"`
+	CreatedAt   string              `json:"created_at"`
+	UpdatedAt   string              `json:"updated_at"`
+	Subtasks    []*task.Task        `json:"subtasks,omitempty"`
 }
 
 func getTaskHandler(svc *task.Service) server.ToolHandlerFunc {
@@ -161,6 +164,8 @@ func getTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		blocked, blockers := svc.IsBlocked(id)
+
 		response := taskWithSubtasksResponse{
 			ID:          t.ID,
 			ParentID:    t.ParentID,
@@ -169,6 +174,9 @@ func getTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 			Status:      t.Status,
 			Priority:    t.Priority,
 			Type:        t.Type,
+			Relations:   t.Relations,
+			Blocked:     blocked,
+			BlockedBy:   blockers,
 			CreatedAt:   t.CreatedAt.Format("2006-01-02T15:04:05Z"),
 			UpdatedAt:   t.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		}
@@ -279,7 +287,18 @@ func listTasksHandler(svc *task.Service) server.ToolHandlerFunc {
 			return mcp.NewToolResultText("No tasks found"), nil
 		}
 
-		data, err := json.MarshalIndent(tasks, "", "  ")
+		// Enrich tasks with blocked field
+		type taskWithBlocked struct {
+			*task.Task
+			Blocked bool `json:"blocked"`
+		}
+		enriched := make([]taskWithBlocked, len(tasks))
+		for i, t := range tasks {
+			blocked, _ := svc.IsBlocked(t.ID)
+			enriched[i] = taskWithBlocked{Task: t, Blocked: blocked}
+		}
+
+		data, err := json.MarshalIndent(enriched, "", "  ")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

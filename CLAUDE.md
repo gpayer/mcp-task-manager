@@ -66,6 +66,11 @@ status: todo          # todo | in_progress | done
 priority: high        # critical | high | medium | low
 type: feature         # configurable, defaults: feature, bug
 parent_id: 0          # optional, 0 or omitted = top-level task
+relations:            # optional, omitted when empty
+  - type: blocked_by
+    task: 3
+  - type: relates_to
+    task: 7
 created_at: 2025-01-15T10:30:00Z
 updated_at: 2025-01-15T10:30:00Z
 ---
@@ -79,7 +84,7 @@ Markdown description here.
 
 ### Task Lifecycle
 - Simple 3-state workflow: `todo` → `in_progress` → `done`
-- Blocked state can be derived (future: via `blocked_by` field)
+- Blocked state derived from `blocked_by` relations (see Relations section)
 
 ### Priority Ordering
 - Named levels: `critical` > `high` > `medium` > `low`
@@ -108,6 +113,39 @@ Tasks support single-level nesting via the `parent_id` field.
 - `list_tasks` shows top-level tasks by default; use `parent_id` filter to list subtasks of a specific parent
 - `get_task` includes subtasks in the response for parent tasks
 
+### Relations
+Tasks support typed relations to other tasks via the `relations` frontmatter field.
+
+**Relation Types:**
+
+| Type | Semantic | Behavioral effect | Symmetric |
+|------|----------|-------------------|-----------|
+| `blocked_by` | Source can't proceed until target is done | Affects `get_next_task`, `start_task`, `get_task`, `list_tasks` | No |
+| `relates_to` | Informational link | None | Yes |
+| `duplicate_of` | Source is a duplicate of target | None | No |
+
+Relation types are configurable via `mcp-tasks.yaml`. Behavioral effects are hardcoded to specific type names (`blocked_by`).
+
+**Storage rules:**
+- `blocked_by`: stored only on the blocked task (the source)
+- `relates_to`: stored on one side only; the index generates the reverse edge
+- `duplicate_of`: stored only on the duplicate (the source)
+- Validation: target task must exist, no self-references, no duplicates
+
+**Blocking behavior:**
+- `get_next_task` skips tasks with unresolved `blocked_by` relations (target not `done`)
+- `start_task` refuses to start a blocked task
+- `get_task` includes a derived `blocked` field and blocker details
+- `list_tasks` includes a derived `blocked` field per task
+
+**Delete cascade:**
+- When deleting a task, all relations referencing it (as source or target) are removed
+- Other tasks' frontmatter is updated to remove stale relations
+
+**Interaction with subtasks:**
+- Relations and subtasks are orthogonal — a subtask can be blocked by a task outside its parent
+- `get_next_task` applies both filters: skip parents with incomplete subtasks AND skip blocked tasks
+
 ## MCP Tools
 
 ### Task Management
@@ -119,11 +157,17 @@ Tasks support single-level nesting via the `parent_id` field.
 | `get_task` | Get full details of a task by ID (includes subtasks for parent tasks) |
 | `delete_task` | Remove a task; use `delete_subtasks: true` to cascade delete subtasks |
 
+### Relations
+| Tool | Description |
+|------|-------------|
+| `add_relation` | Add a relation (`source`, `type`, `target`) between two tasks |
+| `remove_relation` | Remove a relation (`source`, `type`, `target`) between two tasks |
+
 ### Agent Workflow
 | Tool | Description |
 |------|-------------|
-| `get_next_task` | Returns highest priority `todo` task (skips parents with incomplete subtasks) |
-| `start_task` | Move task from `todo` to `in_progress` (auto-starts parent if subtask) |
+| `get_next_task` | Returns highest priority `todo` task (skips parents with incomplete subtasks and blocked tasks) |
+| `start_task` | Move task from `todo` to `in_progress` (auto-starts parent if subtask; refuses if blocked) |
 | `complete_task` | Move task from `in_progress` to `done` (auto-completes parent if last subtask) |
 
 ## Configuration
@@ -133,6 +177,10 @@ Tasks support single-level nesting via the `parent_id` field.
 task_types:
   - feature
   - bug
+relation_types:       # optional, defaults to these three
+  - blocked_by
+  - relates_to
+  - duplicate_of
 ```
 
 Override data directory: `MCP_TASKS_DIR=/path/to/tasks`
@@ -169,7 +217,8 @@ mcp-task-manager/
 │   └── tools/
 │       ├── tools.go             # Tool registration
 │       ├── management.go        # create, update, list, get, delete
-│       └── workflow.go          # get_next_task, start, complete
+│       ├── workflow.go          # get_next_task, start, complete
+│       └── relations.go         # add_relation, remove_relation
 ├── mcp-tasks.yaml               # Default config (for reference)
 ├── go.mod
 ├── go.sum
@@ -182,12 +231,14 @@ mcp-task-manager/
 ### get_next_task
 - Returns highest priority `todo` task (priority order, then oldest first)
 - Skips parent tasks that have incomplete subtasks (returns actionable subtasks instead)
+- Skips tasks with unresolved `blocked_by` relations
 - If no `todo` tasks exist, returns "no tasks available" message (not an error)
 
 ### Index Cache
 - Rebuilt on server startup by scanning all .md files
 - Updated in-memory and persisted after each write operation
 - Self-healing: if index is missing/corrupt, rebuild from .md files
+- Includes relation edges (with auto-generated reverse edges for symmetric types)
 
 ### Concurrency
 - MVP assumes single-server, no locking
@@ -198,8 +249,9 @@ mcp-task-manager/
 - Status: `todo` | `in_progress` | `done`
 - Priority: `critical` | `high` | `medium` | `low`
 - Type: must be in configured list (default: `feature`, `bug`)
+- Relation type: must be in configured list (default: `blocked_by`, `relates_to`, `duplicate_of`)
 
 ## Future Considerations (Post-MVP)
 - Comments/history
-- Task dependencies (`blocked_by`)
+- Cycle detection for `blocked_by` chains
 - Additional task types (chore, docs, refactor)

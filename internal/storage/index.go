@@ -59,8 +59,9 @@ type IndexEntry struct {
 
 // IndexFile is the on-disk format for the index
 type IndexFile struct {
-	GitCommit string        `json:"git_commit"`
-	Tasks     []*IndexEntry `json:"tasks"`
+	GitCommit string              `json:"git_commit"`
+	Tasks     []*IndexEntry       `json:"tasks"`
+	Relations []task.RelationEdge `json:"relations,omitempty"`
 }
 
 // taskToEntry converts a Task to an IndexEntry
@@ -92,19 +93,29 @@ func entryToTask(e *IndexEntry) *task.Task {
 	}
 }
 
+// SymmetricRelationType is a relation type where reverse edges are auto-generated
+const SymmetricRelationType = "relates_to"
+
+// BlockingRelationType is the relation type that affects task execution order
+const BlockingRelationType = "blocked_by"
+
 // Index is an in-memory cache of all tasks
 type Index struct {
-	entries map[int]*IndexEntry
-	dir     string
-	storage *MarkdownStorage
+	entries           map[int]*IndexEntry
+	relationsBySource map[int][]task.RelationEdge
+	relationsByTarget map[int][]task.RelationEdge
+	dir               string
+	storage           *MarkdownStorage
 }
 
 // NewIndex creates a new index for the given directory
 func NewIndex(dir string, storage *MarkdownStorage) *Index {
 	return &Index{
-		entries: make(map[int]*IndexEntry),
-		dir:     dir,
-		storage: storage,
+		entries:           make(map[int]*IndexEntry),
+		relationsBySource: make(map[int][]task.RelationEdge),
+		relationsByTarget: make(map[int][]task.RelationEdge),
+		dir:               dir,
+		storage:           storage,
 	}
 }
 
@@ -121,8 +132,32 @@ func (idx *Index) Rebuild() error {
 	}
 
 	idx.entries = make(map[int]*IndexEntry)
+	idx.relationsBySource = make(map[int][]task.RelationEdge)
+	idx.relationsByTarget = make(map[int][]task.RelationEdge)
+
 	for _, t := range tasks {
 		idx.entries[t.ID] = taskToEntry(t)
+	}
+
+	// Build relation edges from task frontmatter
+	for _, t := range tasks {
+		for _, rel := range t.Relations {
+			edge := task.RelationEdge{
+				Type:   rel.Type,
+				Source: t.ID,
+				Target: rel.Task,
+			}
+			idx.addEdge(edge)
+			// Symmetric types generate a reverse edge
+			if rel.Type == SymmetricRelationType {
+				reverse := task.RelationEdge{
+					Type:   rel.Type,
+					Source: rel.Task,
+					Target: t.ID,
+				}
+				idx.addEdge(reverse)
+			}
+		}
 	}
 
 	return idx.Save()
@@ -146,9 +181,25 @@ func (idx *Index) Save() error {
 		return entries[i].ID < entries[j].ID
 	})
 
+	// Build relations slice
+	var relations []task.RelationEdge
+	for _, edges := range idx.relationsBySource {
+		relations = append(relations, edges...)
+	}
+	sort.Slice(relations, func(i, j int) bool {
+		if relations[i].Source != relations[j].Source {
+			return relations[i].Source < relations[j].Source
+		}
+		if relations[i].Target != relations[j].Target {
+			return relations[i].Target < relations[j].Target
+		}
+		return relations[i].Type < relations[j].Type
+	})
+
 	indexFile := IndexFile{
 		GitCommit: gitCommit,
 		Tasks:     entries,
+		Relations: relations,
 	}
 
 	data, err := json.MarshalIndent(indexFile, "", "  ")
@@ -190,6 +241,13 @@ func (idx *Index) Load() error {
 	idx.entries = make(map[int]*IndexEntry)
 	for _, e := range indexFile.Tasks {
 		idx.entries[e.ID] = e
+	}
+
+	// Load relations into memory
+	idx.relationsBySource = make(map[int][]task.RelationEdge)
+	idx.relationsByTarget = make(map[int][]task.RelationEdge)
+	for _, edge := range indexFile.Relations {
+		idx.addEdge(edge)
 	}
 	return nil
 }
@@ -286,6 +344,10 @@ func (idx *Index) NextTodo() *task.Task {
 		if idx.HasSubtasks(e.ID) {
 			continue
 		}
+		// Skip blocked tasks (have unresolved blocked_by relations)
+		if idx.isBlocked(e.ID) {
+			continue
+		}
 
 		// Check if this is a subtask of an in_progress parent
 		if e.ParentID != nil {
@@ -368,4 +430,137 @@ func (idx *Index) SubtaskCounts(parentID int) (total int, done int) {
 		}
 	}
 	return
+}
+
+// isBlocked checks if a task has any unresolved blocked_by relations
+func (idx *Index) isBlocked(taskID int) bool {
+	for _, e := range idx.relationsBySource[taskID] {
+		if e.Type == BlockingRelationType {
+			if target, ok := idx.entries[e.Target]; ok && target.Status != task.StatusDone {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// addEdge adds an edge to both lookup maps (internal helper, no persistence)
+func (idx *Index) addEdge(edge task.RelationEdge) {
+	idx.relationsBySource[edge.Source] = append(idx.relationsBySource[edge.Source], edge)
+	idx.relationsByTarget[edge.Target] = append(idx.relationsByTarget[edge.Target], edge)
+}
+
+// removeEdge removes an edge from both lookup maps (internal helper, no persistence)
+func (idx *Index) removeEdge(edge task.RelationEdge) {
+	// Remove from source map
+	src := idx.relationsBySource[edge.Source]
+	for i, e := range src {
+		if e.Type == edge.Type && e.Source == edge.Source && e.Target == edge.Target {
+			idx.relationsBySource[edge.Source] = append(src[:i], src[i+1:]...)
+			break
+		}
+	}
+	// Remove from target map
+	tgt := idx.relationsByTarget[edge.Target]
+	for i, e := range tgt {
+		if e.Type == edge.Type && e.Source == edge.Source && e.Target == edge.Target {
+			idx.relationsByTarget[edge.Target] = append(tgt[:i], tgt[i+1:]...)
+			break
+		}
+	}
+}
+
+// AddRelation adds a relation edge to the index
+func (idx *Index) AddRelation(edge task.RelationEdge) {
+	idx.addEdge(edge)
+	// Symmetric types generate a reverse edge
+	if edge.Type == SymmetricRelationType {
+		reverse := task.RelationEdge{
+			Type:   edge.Type,
+			Source: edge.Target,
+			Target: edge.Source,
+		}
+		idx.addEdge(reverse)
+	}
+}
+
+// RemoveRelation removes a relation edge from the index
+func (idx *Index) RemoveRelation(edge task.RelationEdge) {
+	idx.removeEdge(edge)
+	// Symmetric types also remove the reverse edge
+	if edge.Type == SymmetricRelationType {
+		reverse := task.RelationEdge{
+			Type:   edge.Type,
+			Source: edge.Target,
+			Target: edge.Source,
+		}
+		idx.removeEdge(reverse)
+	}
+}
+
+// GetRelationsForTask returns all edges where task is source OR target
+func (idx *Index) GetRelationsForTask(taskID int) []task.RelationEdge {
+	seen := make(map[task.RelationEdge]bool)
+	var result []task.RelationEdge
+
+	for _, e := range idx.relationsBySource[taskID] {
+		if !seen[e] {
+			seen[e] = true
+			result = append(result, e)
+		}
+	}
+	for _, e := range idx.relationsByTarget[taskID] {
+		if !seen[e] {
+			seen[e] = true
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// GetBlockers returns target IDs from blocked_by edges where source == taskID
+func (idx *Index) GetBlockers(taskID int) []int {
+	var blockers []int
+	for _, e := range idx.relationsBySource[taskID] {
+		if e.Type == BlockingRelationType {
+			blockers = append(blockers, e.Target)
+		}
+	}
+	return blockers
+}
+
+// RemoveAllRelationsForTask removes all relations where task appears as source or target
+// Returns the removed edges so the service knows which other task files to update
+func (idx *Index) RemoveAllRelationsForTask(taskID int) []task.RelationEdge {
+	var removed []task.RelationEdge
+
+	// Remove edges where task is source
+	for _, e := range idx.relationsBySource[taskID] {
+		removed = append(removed, e)
+		// Remove from target's map
+		tgt := idx.relationsByTarget[e.Target]
+		for i, te := range tgt {
+			if te.Type == e.Type && te.Source == e.Source && te.Target == e.Target {
+				idx.relationsByTarget[e.Target] = append(tgt[:i], tgt[i+1:]...)
+				break
+			}
+		}
+	}
+	delete(idx.relationsBySource, taskID)
+
+	// Remove edges where task is target
+	for _, e := range idx.relationsByTarget[taskID] {
+		removed = append(removed, e)
+		// Remove from source's map
+		src := idx.relationsBySource[e.Source]
+		for i, se := range src {
+			if se.Type == e.Type && se.Source == e.Source && se.Target == e.Target {
+				idx.relationsBySource[e.Source] = append(src[:i], src[i+1:]...)
+				break
+			}
+		}
+	}
+	delete(idx.relationsByTarget, taskID)
+
+	return removed
 }

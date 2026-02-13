@@ -107,6 +107,14 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 		}
 	}
 
+	// Build blocked status for each task
+	blockedTasks := make(map[int]bool)
+	for _, t := range tasks {
+		if blocked, _ := svc.IsBlocked(t.ID); blocked {
+			blockedTasks[t.ID] = true
+		}
+	}
+
 	if jsonOutput {
 		// Ensure we always output a JSON array, even if empty
 		if tasks == nil {
@@ -117,7 +125,7 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 			return 1
 		}
 	} else {
-		fmt.Fprint(stdout, FormatTaskTable(tasks, subtaskCounts))
+		fmt.Fprint(stdout, FormatTaskTable(tasks, subtaskCounts, blockedTasks))
 	}
 
 	return 0
@@ -148,6 +156,8 @@ func cmdGet(stdout, stderr io.Writer, jsonOutput bool, id int) int {
 		return 1
 	}
 
+	blocked, blockers := svc.IsBlocked(id)
+
 	if jsonOutput {
 		// Include subtasks in JSON output
 		type taskWithSubtasks struct {
@@ -163,7 +173,12 @@ func cmdGet(stdout, stderr io.Writer, jsonOutput bool, id int) int {
 			return 1
 		}
 	} else {
-		fmt.Fprint(stdout, FormatTaskDetail(t, subtasks))
+		opts := &TaskDetailOptions{
+			Subtasks: subtasks,
+			Blocked:  blocked,
+			Blockers: blockers,
+		}
+		fmt.Fprint(stdout, FormatTaskDetail(t, opts))
 	}
 
 	return 0

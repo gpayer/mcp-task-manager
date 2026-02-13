@@ -9,16 +9,21 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	TaskTypes    []string `yaml:"task_types"`
-	DataDir      string   `yaml:"-"` // Set from env or default
-	ProjectFound bool     `yaml:"-"` // Whether an existing project was discovered
+	TaskTypes     []string `yaml:"task_types"`
+	RelationTypes []string `yaml:"relation_types,omitempty"`
+	DataDir       string   `yaml:"-"` // Set from env or default
+	ProjectFound  bool     `yaml:"-"` // Whether an existing project was discovered
 }
+
+// DefaultRelationTypes returns the default relation types
+var DefaultRelationTypes = []string{"blocked_by", "relates_to", "duplicate_of"}
 
 // DefaultConfig returns configuration with defaults
 func DefaultConfig() *Config {
 	return &Config{
-		TaskTypes: []string{"feature", "bug"},
-		DataDir:   "./tasks",
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: DefaultRelationTypes,
+		DataDir:       "./tasks",
 	}
 }
 
@@ -77,6 +82,16 @@ func (c *Config) TasksDir() string {
 // IsValidTaskType checks if task type is in configured list
 func (c *Config) IsValidTaskType(t string) bool {
 	for _, valid := range c.TaskTypes {
+		if t == valid {
+			return true
+		}
+	}
+	return false
+}
+
+// IsValidRelationType checks if relation type is in configured list
+func (c *Config) IsValidRelationType(t string) bool {
+	for _, valid := range c.RelationTypes {
 		if t == valid {
 			return true
 		}

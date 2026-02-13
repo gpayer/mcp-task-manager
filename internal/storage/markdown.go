@@ -38,14 +38,15 @@ func (s *MarkdownStorage) taskPath(id int) string {
 func (s *MarkdownStorage) Save(t *task.Task) error {
 	// Build frontmatter
 	frontmatter := struct {
-		ID        int           `yaml:"id"`
-		ParentID  *int          `yaml:"parent_id,omitempty"`
-		Title     string        `yaml:"title"`
-		Status    task.Status   `yaml:"status"`
-		Priority  task.Priority `yaml:"priority"`
-		Type      string        `yaml:"type"`
-		CreatedAt string        `yaml:"created_at"`
-		UpdatedAt string        `yaml:"updated_at"`
+		ID        int             `yaml:"id"`
+		ParentID  *int            `yaml:"parent_id,omitempty"`
+		Title     string          `yaml:"title"`
+		Status    task.Status     `yaml:"status"`
+		Priority  task.Priority   `yaml:"priority"`
+		Type      string          `yaml:"type"`
+		Relations []task.Relation `yaml:"relations,omitempty"`
+		CreatedAt string          `yaml:"created_at"`
+		UpdatedAt string          `yaml:"updated_at"`
 	}{
 		ID:        t.ID,
 		ParentID:  t.ParentID,
@@ -53,6 +54,7 @@ func (s *MarkdownStorage) Save(t *task.Task) error {
 		Status:    t.Status,
 		Priority:  t.Priority,
 		Type:      t.Type,
+		Relations: t.Relations,
 		CreatedAt: t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt: t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
@@ -146,14 +148,15 @@ func (s *MarkdownStorage) parse(data []byte) (*task.Task, error) {
 
 	// Parse frontmatter
 	var fm struct {
-		ID        int    `yaml:"id"`
-		ParentID  *int   `yaml:"parent_id"`
-		Title     string `yaml:"title"`
-		Status    string `yaml:"status"`
-		Priority  string `yaml:"priority"`
-		Type      string `yaml:"type"`
-		CreatedAt string `yaml:"created_at"`
-		UpdatedAt string `yaml:"updated_at"`
+		ID        int             `yaml:"id"`
+		ParentID  *int            `yaml:"parent_id"`
+		Title     string          `yaml:"title"`
+		Status    string          `yaml:"status"`
+		Priority  string          `yaml:"priority"`
+		Type      string          `yaml:"type"`
+		Relations []task.Relation `yaml:"relations"`
+		CreatedAt string          `yaml:"created_at"`
+		UpdatedAt string          `yaml:"updated_at"`
 	}
 	if err := yaml.Unmarshal(frontmatterBuf.Bytes(), &fm); err != nil {
 		return nil, err
@@ -180,6 +183,7 @@ func (s *MarkdownStorage) parse(data []byte) (*task.Task, error) {
 		Status:      task.Status(fm.Status),
 		Priority:    task.Priority(fm.Priority),
 		Type:        fm.Type,
+		Relations:   fm.Relations,
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
 	}, nil

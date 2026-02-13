@@ -45,7 +45,7 @@ func main() {
 	)
 
 	// Register tools
-	tools.Register(s, svc, cfg.TaskTypes)
+	tools.Register(s, svc, cfg.TaskTypes, cfg.RelationTypes)
 
 	// Start server
 	if err := server.ServeStdio(s); err != nil {

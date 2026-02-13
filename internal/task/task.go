@@ -37,17 +37,24 @@ func (p Priority) Order() int {
 	}
 }
 
+// Relation represents a link between tasks
+type Relation struct {
+	Type string `yaml:"type" json:"type"`
+	Task int    `yaml:"task" json:"task"`
+}
+
 // Task represents a single task
 type Task struct {
-	ID          int       `yaml:"id" json:"id"`
-	ParentID    *int      `yaml:"parent_id,omitempty" json:"parent_id,omitempty"`
-	Title       string    `yaml:"title" json:"title"`
-	Description string    `yaml:"-" json:"description"` // Stored in markdown body
-	Status      Status    `yaml:"status" json:"status"`
-	Priority    Priority  `yaml:"priority" json:"priority"`
-	Type        string    `yaml:"type" json:"type"`
-	CreatedAt   time.Time `yaml:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `yaml:"updated_at" json:"updated_at"`
+	ID          int        `yaml:"id" json:"id"`
+	ParentID    *int       `yaml:"parent_id,omitempty" json:"parent_id,omitempty"`
+	Title       string     `yaml:"title" json:"title"`
+	Description string     `yaml:"-" json:"description"` // Stored in markdown body
+	Status      Status     `yaml:"status" json:"status"`
+	Priority    Priority   `yaml:"priority" json:"priority"`
+	Type        string     `yaml:"type" json:"type"`
+	Relations   []Relation `yaml:"relations,omitempty" json:"relations,omitempty"`
+	CreatedAt   time.Time  `yaml:"created_at" json:"created_at"`
+	UpdatedAt   time.Time  `yaml:"updated_at" json:"updated_at"`
 }
 
 // IsValidStatus checks if status is valid

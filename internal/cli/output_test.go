@@ -60,7 +60,7 @@ func TestFormatTaskDetailWithSubtasks(t *testing.T) {
 		{ID: 3, Title: "Subtask 2", Status: task.StatusTodo, ParentID: &parentID},
 	}
 
-	output := FormatTaskDetail(tk, subtasks)
+	output := FormatTaskDetail(tk, &TaskDetailOptions{Subtasks: subtasks})
 
 	if !strings.Contains(output, "Subtasks (2)") {
 		t.Error("expected 'Subtasks (2)' in output")
@@ -79,7 +79,7 @@ func TestFormatTaskTable(t *testing.T) {
 		{ID: 2, Title: "Second task", Status: task.StatusDone, Priority: task.PriorityLow, Type: "bug"},
 	}
 
-	output := FormatTaskTable(tasks, nil)
+	output := FormatTaskTable(tasks, nil, nil)
 
 	if !strings.Contains(output, "ID") {
 		t.Error("expected header row")
@@ -105,7 +105,7 @@ func TestFormatTaskTableWithSubtasks(t *testing.T) {
 		1: {Total: 3, Done: 2},
 	}
 
-	output := FormatTaskTable(tasks, subtaskCounts)
+	output := FormatTaskTable(tasks, subtaskCounts, nil)
 
 	// Parent task should show [2/3] (2 done out of 3 subtasks)
 	if !strings.Contains(output, "[2/3]") {
@@ -114,7 +114,7 @@ func TestFormatTaskTableWithSubtasks(t *testing.T) {
 }
 
 func TestFormatTaskTableEmpty(t *testing.T) {
-	output := FormatTaskTable([]*task.Task{}, nil)
+	output := FormatTaskTable([]*task.Task{}, nil, nil)
 	if !strings.Contains(output, "No tasks") {
 		t.Error("expected 'No tasks' message for empty list")
 	}

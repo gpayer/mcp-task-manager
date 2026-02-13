@@ -36,12 +36,19 @@ func (m *mockStorage) EnsureDir() error {
 
 // mockIndex implements Index interface for testing
 type mockIndex struct {
-	tasks  map[int]*Task
-	nextID int
+	tasks             map[int]*Task
+	nextID            int
+	relationsBySource map[int][]RelationEdge
+	relationsByTarget map[int][]RelationEdge
 }
 
 func newMockIndex() *mockIndex {
-	return &mockIndex{tasks: make(map[int]*Task), nextID: 1}
+	return &mockIndex{
+		tasks:             make(map[int]*Task),
+		nextID:            1,
+		relationsBySource: make(map[int][]RelationEdge),
+		relationsByTarget: make(map[int][]RelationEdge),
+	}
 }
 
 func (m *mockIndex) Load() error { return nil }
@@ -146,6 +153,98 @@ func (m *mockIndex) SubtaskCounts(parentID int) (total int, done int) {
 		}
 	}
 	return
+}
+
+func (m *mockIndex) AddRelation(edge RelationEdge) {
+	m.relationsBySource[edge.Source] = append(m.relationsBySource[edge.Source], edge)
+	m.relationsByTarget[edge.Target] = append(m.relationsByTarget[edge.Target], edge)
+	if edge.Type == "relates_to" {
+		reverse := RelationEdge{Type: edge.Type, Source: edge.Target, Target: edge.Source}
+		m.relationsBySource[reverse.Source] = append(m.relationsBySource[reverse.Source], reverse)
+		m.relationsByTarget[reverse.Target] = append(m.relationsByTarget[reverse.Target], reverse)
+	}
+}
+
+func (m *mockIndex) removeEdge(edge RelationEdge) {
+	src := m.relationsBySource[edge.Source]
+	for i, e := range src {
+		if e.Type == edge.Type && e.Source == edge.Source && e.Target == edge.Target {
+			m.relationsBySource[edge.Source] = append(src[:i], src[i+1:]...)
+			break
+		}
+	}
+	tgt := m.relationsByTarget[edge.Target]
+	for i, e := range tgt {
+		if e.Type == edge.Type && e.Source == edge.Source && e.Target == edge.Target {
+			m.relationsByTarget[edge.Target] = append(tgt[:i], tgt[i+1:]...)
+			break
+		}
+	}
+}
+
+func (m *mockIndex) RemoveRelation(edge RelationEdge) {
+	m.removeEdge(edge)
+	if edge.Type == "relates_to" {
+		reverse := RelationEdge{Type: edge.Type, Source: edge.Target, Target: edge.Source}
+		m.removeEdge(reverse)
+	}
+}
+
+func (m *mockIndex) GetRelationsForTask(taskID int) []RelationEdge {
+	seen := make(map[RelationEdge]bool)
+	var result []RelationEdge
+	for _, e := range m.relationsBySource[taskID] {
+		if !seen[e] {
+			seen[e] = true
+			result = append(result, e)
+		}
+	}
+	for _, e := range m.relationsByTarget[taskID] {
+		if !seen[e] {
+			seen[e] = true
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+func (m *mockIndex) GetBlockers(taskID int) []int {
+	var blockers []int
+	for _, e := range m.relationsBySource[taskID] {
+		if e.Type == "blocked_by" {
+			blockers = append(blockers, e.Target)
+		}
+	}
+	return blockers
+}
+
+func (m *mockIndex) RemoveAllRelationsForTask(taskID int) []RelationEdge {
+	var removed []RelationEdge
+	for _, e := range m.relationsBySource[taskID] {
+		removed = append(removed, e)
+		tgt := m.relationsByTarget[e.Target]
+		for i, te := range tgt {
+			if te.Type == e.Type && te.Source == e.Source && te.Target == e.Target {
+				m.relationsByTarget[e.Target] = append(tgt[:i], tgt[i+1:]...)
+				break
+			}
+		}
+	}
+	delete(m.relationsBySource, taskID)
+
+	for _, e := range m.relationsByTarget[taskID] {
+		removed = append(removed, e)
+		src := m.relationsBySource[e.Source]
+		for i, se := range src {
+			if se.Type == e.Type && se.Source == e.Source && se.Target == e.Target {
+				m.relationsBySource[e.Source] = append(src[:i], src[i+1:]...)
+				break
+			}
+		}
+	}
+	delete(m.relationsByTarget, taskID)
+
+	return removed
 }
 
 func TestService_Create(t *testing.T) {
@@ -950,4 +1049,203 @@ func TestSubtaskLifecycle(t *testing.T) {
 	}
 
 	t.Log("Subtask lifecycle integration test completed successfully")
+}
+
+// === Relation Service Tests ===
+
+func TestService_AddRelation(t *testing.T) {
+	cfg := &config.Config{
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: config.DefaultRelationTypes,
+	}
+	svc := NewService(newMockStorage(), newMockIndex(), cfg.TaskTypes, cfg)
+	svc.Initialize()
+
+	task1, _ := svc.Create("Task 1", "", PriorityHigh, "feature", nil)
+	task2, _ := svc.Create("Task 2", "", PriorityHigh, "feature", nil)
+
+	err := svc.AddRelation(task2.ID, "blocked_by", task1.ID)
+	if err != nil {
+		t.Fatalf("AddRelation() error = %v", err)
+	}
+
+	// Verify relation is on the source task
+	t2, _ := svc.Get(task2.ID)
+	if len(t2.Relations) != 1 {
+		t.Fatalf("task2 relations count = %d, want 1", len(t2.Relations))
+	}
+	if t2.Relations[0].Type != "blocked_by" || t2.Relations[0].Task != task1.ID {
+		t.Errorf("task2 relation = %v, want {blocked_by, %d}", t2.Relations[0], task1.ID)
+	}
+}
+
+func TestService_AddRelation_Validation(t *testing.T) {
+	cfg := &config.Config{
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: config.DefaultRelationTypes,
+	}
+	svc := NewService(newMockStorage(), newMockIndex(), cfg.TaskTypes, cfg)
+	svc.Initialize()
+
+	task1, _ := svc.Create("Task 1", "", PriorityHigh, "feature", nil)
+	task2, _ := svc.Create("Task 2", "", PriorityHigh, "feature", nil)
+
+	// Self-reference
+	if err := svc.AddRelation(task1.ID, "blocked_by", task1.ID); err == nil {
+		t.Error("AddRelation() with self-reference should fail")
+	}
+
+	// Invalid relation type
+	if err := svc.AddRelation(task1.ID, "invalid_type", task2.ID); err == nil {
+		t.Error("AddRelation() with invalid type should fail")
+	}
+
+	// Non-existent source
+	if err := svc.AddRelation(999, "blocked_by", task1.ID); err == nil {
+		t.Error("AddRelation() with non-existent source should fail")
+	}
+
+	// Non-existent target
+	if err := svc.AddRelation(task1.ID, "blocked_by", 999); err == nil {
+		t.Error("AddRelation() with non-existent target should fail")
+	}
+
+	// Duplicate
+	svc.AddRelation(task2.ID, "blocked_by", task1.ID)
+	if err := svc.AddRelation(task2.ID, "blocked_by", task1.ID); err == nil {
+		t.Error("AddRelation() with duplicate should fail")
+	}
+}
+
+func TestService_RemoveRelation(t *testing.T) {
+	cfg := &config.Config{
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: config.DefaultRelationTypes,
+	}
+	svc := NewService(newMockStorage(), newMockIndex(), cfg.TaskTypes, cfg)
+	svc.Initialize()
+
+	task1, _ := svc.Create("Task 1", "", PriorityHigh, "feature", nil)
+	task2, _ := svc.Create("Task 2", "", PriorityHigh, "feature", nil)
+
+	svc.AddRelation(task2.ID, "blocked_by", task1.ID)
+
+	err := svc.RemoveRelation(task2.ID, "blocked_by", task1.ID)
+	if err != nil {
+		t.Fatalf("RemoveRelation() error = %v", err)
+	}
+
+	t2, _ := svc.Get(task2.ID)
+	if len(t2.Relations) != 0 {
+		t.Errorf("task2 relations count = %d, want 0", len(t2.Relations))
+	}
+}
+
+func TestService_RemoveRelation_NotFound(t *testing.T) {
+	cfg := &config.Config{
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: config.DefaultRelationTypes,
+	}
+	svc := NewService(newMockStorage(), newMockIndex(), cfg.TaskTypes, cfg)
+	svc.Initialize()
+
+	task1, _ := svc.Create("Task 1", "", PriorityHigh, "feature", nil)
+	svc.Create("Task 2", "", PriorityHigh, "feature", nil)
+
+	err := svc.RemoveRelation(task1.ID, "blocked_by", 2)
+	if err == nil {
+		t.Error("RemoveRelation() on non-existent relation should fail")
+	}
+}
+
+func TestService_IsBlocked(t *testing.T) {
+	cfg := &config.Config{
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: config.DefaultRelationTypes,
+	}
+	svc := NewService(newMockStorage(), newMockIndex(), cfg.TaskTypes, cfg)
+	svc.Initialize()
+
+	task1, _ := svc.Create("Blocker", "", PriorityHigh, "feature", nil)
+	task2, _ := svc.Create("Blocked", "", PriorityHigh, "feature", nil)
+
+	svc.AddRelation(task2.ID, "blocked_by", task1.ID)
+
+	blocked, blockers := svc.IsBlocked(task2.ID)
+	if !blocked {
+		t.Error("IsBlocked() should return true for blocked task")
+	}
+	if len(blockers) != 1 {
+		t.Fatalf("blockers count = %d, want 1", len(blockers))
+	}
+	if blockers[0].TaskID != task1.ID {
+		t.Errorf("blocker ID = %d, want %d", blockers[0].TaskID, task1.ID)
+	}
+
+	// Unblocked task
+	blocked, blockers = svc.IsBlocked(task1.ID)
+	if blocked {
+		t.Error("IsBlocked() should return false for unblocked task")
+	}
+	if len(blockers) != 0 {
+		t.Errorf("blockers should be empty for unblocked task, got %v", blockers)
+	}
+}
+
+func TestService_StartTask_Blocked(t *testing.T) {
+	cfg := &config.Config{
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: config.DefaultRelationTypes,
+	}
+	svc := NewService(newMockStorage(), newMockIndex(), cfg.TaskTypes, cfg)
+	svc.Initialize()
+
+	task1, _ := svc.Create("Blocker", "", PriorityHigh, "feature", nil)
+	task2, _ := svc.Create("Blocked", "", PriorityHigh, "feature", nil)
+
+	svc.AddRelation(task2.ID, "blocked_by", task1.ID)
+
+	_, err := svc.StartTask(task2.ID)
+	if err == nil {
+		t.Error("StartTask() on blocked task should fail")
+	}
+
+	// Start the blocker, complete it, then the blocked task should be startable
+	svc.StartTask(task1.ID)
+	svc.CompleteTask(task1.ID)
+
+	_, err = svc.StartTask(task2.ID)
+	if err != nil {
+		t.Fatalf("StartTask() after unblocking error = %v", err)
+	}
+}
+
+func TestService_Delete_CascadesRelations(t *testing.T) {
+	cfg := &config.Config{
+		TaskTypes:     []string{"feature", "bug"},
+		RelationTypes: config.DefaultRelationTypes,
+	}
+	svc := NewService(newMockStorage(), newMockIndex(), cfg.TaskTypes, cfg)
+	svc.Initialize()
+
+	task1, _ := svc.Create("Task 1", "", PriorityHigh, "feature", nil)
+	task2, _ := svc.Create("Task 2", "", PriorityHigh, "feature", nil)
+
+	svc.AddRelation(task2.ID, "blocked_by", task1.ID)
+
+	// Delete task 1 - should clean up the relation in task 2
+	if err := svc.Delete(task1.ID, false); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	// Task 2 should no longer be blocked
+	t2, _ := svc.Get(task2.ID)
+	if len(t2.Relations) != 0 {
+		t.Errorf("task2 should have no relations after deleting blocker, got %v", t2.Relations)
+	}
+
+	blocked, _ := svc.IsBlocked(task2.ID)
+	if blocked {
+		t.Error("task2 should not be blocked after deleting blocker")
+	}
 }

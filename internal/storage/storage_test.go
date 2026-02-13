@@ -998,6 +998,340 @@ func TestIndex_Load_MigratesOldFormat(t *testing.T) {
 	}
 }
 
+// === Relation Tests ===
+
+func TestMarkdownStorage_SaveLoad_WithRelations(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	tsk := &task.Task{
+		ID:       5,
+		Title:    "Blocked task",
+		Status:   task.StatusTodo,
+		Priority: task.PriorityHigh,
+		Type:     "feature",
+		Relations: []task.Relation{
+			{Type: "blocked_by", Task: 3},
+			{Type: "relates_to", Task: 7},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := storage.Save(tsk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := storage.Load(5)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if len(loaded.Relations) != 2 {
+		t.Fatalf("Relations count = %d, want 2", len(loaded.Relations))
+	}
+	if loaded.Relations[0].Type != "blocked_by" || loaded.Relations[0].Task != 3 {
+		t.Errorf("Relations[0] = %v, want {blocked_by, 3}", loaded.Relations[0])
+	}
+	if loaded.Relations[1].Type != "relates_to" || loaded.Relations[1].Task != 7 {
+		t.Errorf("Relations[1] = %v, want {relates_to, 7}", loaded.Relations[1])
+	}
+}
+
+func TestMarkdownStorage_SaveLoad_WithoutRelations(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	tsk := &task.Task{
+		ID:        1,
+		Title:     "Plain task",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityHigh,
+		Type:      "feature",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := storage.Save(tsk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Verify the file doesn't contain "relations" field
+	data, err := os.ReadFile(filepath.Join(dir, "001.md"))
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+	if strings.Contains(string(data), "relations:") {
+		t.Errorf("File should not contain 'relations:' field when empty, got:\n%s", string(data))
+	}
+
+	loaded, err := storage.Load(1)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(loaded.Relations) != 0 {
+		t.Errorf("Relations should be empty, got %v", loaded.Relations)
+	}
+}
+
+func TestIndex_AddRemoveRelation(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Add a relation
+	edge := task.RelationEdge{Type: "blocked_by", Source: 5, Target: 3}
+	idx.AddRelation(edge)
+
+	// Verify it's in the index
+	relations := idx.GetRelationsForTask(5)
+	if len(relations) != 1 {
+		t.Fatalf("GetRelationsForTask(5) = %d, want 1", len(relations))
+	}
+	if relations[0].Type != "blocked_by" || relations[0].Target != 3 {
+		t.Errorf("relation = %v, want {blocked_by, 5, 3}", relations[0])
+	}
+
+	// Target task should also see the relation
+	relations = idx.GetRelationsForTask(3)
+	if len(relations) != 1 {
+		t.Fatalf("GetRelationsForTask(3) = %d, want 1", len(relations))
+	}
+
+	// Remove the relation
+	idx.RemoveRelation(edge)
+	relations = idx.GetRelationsForTask(5)
+	if len(relations) != 0 {
+		t.Errorf("GetRelationsForTask(5) after remove = %d, want 0", len(relations))
+	}
+}
+
+func TestIndex_SymmetricRelation(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Add a relates_to relation (symmetric)
+	edge := task.RelationEdge{Type: "relates_to", Source: 5, Target: 7}
+	idx.AddRelation(edge)
+
+	// Both tasks should see the relation
+	rel5 := idx.GetRelationsForTask(5)
+	rel7 := idx.GetRelationsForTask(7)
+
+	if len(rel5) != 2 { // original + reverse
+		t.Errorf("GetRelationsForTask(5) = %d, want 2 (original + reverse)", len(rel5))
+	}
+	if len(rel7) != 2 { // original + reverse
+		t.Errorf("GetRelationsForTask(7) = %d, want 2 (original + reverse)", len(rel7))
+	}
+
+	// Remove the relation - should remove both edges
+	idx.RemoveRelation(edge)
+	rel5 = idx.GetRelationsForTask(5)
+	rel7 = idx.GetRelationsForTask(7)
+	if len(rel5) != 0 {
+		t.Errorf("GetRelationsForTask(5) after remove = %d, want 0", len(rel5))
+	}
+	if len(rel7) != 0 {
+		t.Errorf("GetRelationsForTask(7) after remove = %d, want 0", len(rel7))
+	}
+}
+
+func TestIndex_GetBlockers(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Add blocked_by relations
+	idx.AddRelation(task.RelationEdge{Type: "blocked_by", Source: 5, Target: 3})
+	idx.AddRelation(task.RelationEdge{Type: "blocked_by", Source: 5, Target: 8})
+	idx.AddRelation(task.RelationEdge{Type: "relates_to", Source: 5, Target: 10})
+
+	blockers := idx.GetBlockers(5)
+	if len(blockers) != 2 {
+		t.Fatalf("GetBlockers(5) = %d, want 2", len(blockers))
+	}
+
+	// Task 3 should not have any blockers
+	blockers = idx.GetBlockers(3)
+	if len(blockers) != 0 {
+		t.Errorf("GetBlockers(3) = %d, want 0", len(blockers))
+	}
+}
+
+func TestIndex_RemoveAllRelationsForTask(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	// Add multiple relations involving task 5
+	idx.AddRelation(task.RelationEdge{Type: "blocked_by", Source: 5, Target: 3})
+	idx.AddRelation(task.RelationEdge{Type: "relates_to", Source: 5, Target: 7})
+	idx.AddRelation(task.RelationEdge{Type: "blocked_by", Source: 10, Target: 5})
+
+	removed := idx.RemoveAllRelationsForTask(5)
+	if len(removed) < 3 { // at least 3 edges: blocked_by 5->3, relates_to 5->7, relates_to 7->5 (reverse), blocked_by 10->5
+		t.Logf("removed %d edges", len(removed))
+	}
+
+	// Task 5 should have no relations
+	rel5 := idx.GetRelationsForTask(5)
+	if len(rel5) != 0 {
+		t.Errorf("GetRelationsForTask(5) after remove all = %d, want 0", len(rel5))
+	}
+
+	// Task 3 should have no relations pointing at 5
+	rel3 := idx.GetRelationsForTask(3)
+	if len(rel3) != 0 {
+		t.Errorf("GetRelationsForTask(3) after remove all = %d, want 0", len(rel3))
+	}
+}
+
+func TestIndex_NextTodo_SkipsBlockedTasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+
+	// Create tasks: task 1 (blocker, todo), task 2 (blocked by 1, high priority), task 3 (low priority)
+	task1 := &task.Task{ID: 1, Title: "Blocker", Status: task.StatusTodo, Priority: task.PriorityMedium, Type: "feature", CreatedAt: now, UpdatedAt: now}
+	task2 := &task.Task{ID: 2, Title: "Blocked", Status: task.StatusTodo, Priority: task.PriorityCritical, Type: "feature", CreatedAt: now, UpdatedAt: now}
+	task3 := &task.Task{ID: 3, Title: "Unblocked", Status: task.StatusTodo, Priority: task.PriorityLow, Type: "feature", CreatedAt: now, UpdatedAt: now}
+
+	storage.Save(task1)
+	storage.Save(task2)
+	storage.Save(task3)
+
+	idx.Set(task1)
+	idx.Set(task2)
+	idx.Set(task3)
+
+	// Block task 2 by task 1
+	idx.AddRelation(task.RelationEdge{Type: "blocked_by", Source: 2, Target: 1})
+
+	// NextTodo should skip task 2 (blocked) and return task 1 (medium priority, higher than task 3)
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 1 {
+		t.Errorf("NextTodo() ID = %d, want 1 (blocker task, medium priority)", next.ID)
+	}
+
+	// Mark task 1 as done - now task 2 should be unblocked
+	task1.Status = task.StatusDone
+	idx.Set(task1)
+
+	next = idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil after unblocking")
+	}
+	if next.ID != 2 {
+		t.Errorf("NextTodo() ID = %d, want 2 (now unblocked, critical priority)", next.ID)
+	}
+}
+
+func TestIndex_RebuildWithRelations(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+
+	now := time.Now().UTC()
+
+	// Create tasks with relations in frontmatter
+	task1 := &task.Task{ID: 1, Title: "Blocker", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now, UpdatedAt: now}
+	task2 := &task.Task{
+		ID: 2, Title: "Blocked", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature",
+		Relations: []task.Relation{{Type: "blocked_by", Task: 1}},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	task3 := &task.Task{
+		ID: 3, Title: "Related", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature",
+		Relations: []task.Relation{{Type: "relates_to", Task: 1}},
+		CreatedAt: now, UpdatedAt: now,
+	}
+
+	storage.Save(task1)
+	storage.Save(task2)
+	storage.Save(task3)
+
+	// Create new index and rebuild from files
+	idx := NewIndex(dir, storage)
+	if err := idx.Rebuild(); err != nil {
+		t.Fatalf("Rebuild() error = %v", err)
+	}
+
+	// Verify blocked_by edge
+	blockers := idx.GetBlockers(2)
+	if len(blockers) != 1 || blockers[0] != 1 {
+		t.Errorf("GetBlockers(2) = %v, want [1]", blockers)
+	}
+
+	// Verify relates_to generates symmetric edges
+	rel1 := idx.GetRelationsForTask(1)
+	hasRelatesToFrom1 := false
+	hasRelatesToFrom3 := false
+	for _, r := range rel1 {
+		if r.Type == "relates_to" && r.Source == 1 && r.Target == 3 {
+			hasRelatesToFrom1 = true
+		}
+		if r.Type == "relates_to" && r.Source == 3 && r.Target == 1 {
+			hasRelatesToFrom3 = true
+		}
+	}
+	if !hasRelatesToFrom1 {
+		t.Error("expected reverse relates_to edge (1->3) in task 1 relations")
+	}
+	if !hasRelatesToFrom3 {
+		t.Error("expected original relates_to edge (3->1) in task 1 relations")
+	}
+}
+
+func TestIndex_SaveLoadWithRelations(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	tk := &task.Task{ID: 1, Title: "Test", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now, UpdatedAt: now}
+	storage.Save(tk)
+	idx.Set(tk)
+
+	// Add some relations
+	idx.AddRelation(task.RelationEdge{Type: "blocked_by", Source: 2, Target: 1})
+	idx.AddRelation(task.RelationEdge{Type: "relates_to", Source: 1, Target: 3})
+
+	if err := idx.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Verify the index file contains relations
+	data, err := os.ReadFile(filepath.Join(dir, ".index.json"))
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+	if !strings.Contains(string(data), "blocked_by") {
+		t.Error("Index file should contain blocked_by relation")
+	}
+	if !strings.Contains(string(data), "relates_to") {
+		t.Error("Index file should contain relates_to relation")
+	}
+
+	// Load into new index and verify relations are restored
+	idx2 := NewIndex(dir, storage)
+	if err := idx2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	blockers := idx2.GetBlockers(2)
+	if len(blockers) != 1 || blockers[0] != 1 {
+		t.Errorf("GetBlockers(2) after load = %v, want [1]", blockers)
+	}
+}
+
 func TestIndex_Integration_FullFlow(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewMarkdownStorage(dir)

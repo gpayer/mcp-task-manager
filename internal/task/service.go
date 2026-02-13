@@ -3,6 +3,7 @@ package task
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gpayer/mcp-task-manager/internal/config"
@@ -17,6 +18,13 @@ type Storage interface {
 	Load(id int) (*Task, error)
 	Delete(id int) error
 	EnsureDir() error
+}
+
+// RelationEdge represents a directed relation between two tasks in the index
+type RelationEdge struct {
+	Type   string `json:"type"`
+	Source int    `json:"source"`
+	Target int    `json:"target"`
 }
 
 // Index interface for task indexing
@@ -40,6 +48,12 @@ type Index interface {
 	GetSubtasks(parentID int) []*Task // Returns tasks without descriptions (from index)
 	HasSubtasks(taskID int) bool
 	SubtaskCounts(parentID int) (total int, done int)
+	// Relation methods
+	AddRelation(edge RelationEdge)
+	RemoveRelation(edge RelationEdge)
+	GetRelationsForTask(taskID int) []RelationEdge
+	GetBlockers(taskID int) []int
+	RemoveAllRelationsForTask(taskID int) []RelationEdge
 }
 
 // Service provides task management operations
@@ -235,6 +249,37 @@ func (s *Service) Delete(id int, deleteSubtasks bool) error {
 		}
 	}
 
+	// Remove all relations referencing this task
+	removedEdges := s.index.RemoveAllRelationsForTask(id)
+
+	// Update other tasks' frontmatter to remove relations pointing to this task
+	affectedTasks := make(map[int]bool)
+	for _, edge := range removedEdges {
+		// Only update frontmatter for edges where the other task is the source
+		// (relations are stored in the source task's frontmatter)
+		if edge.Source != id {
+			affectedTasks[edge.Source] = true
+		}
+	}
+	for affectedID := range affectedTasks {
+		affected, err := s.Get(affectedID)
+		if err != nil {
+			continue
+		}
+		var newRelations []Relation
+		for _, rel := range affected.Relations {
+			if rel.Task != id {
+				newRelations = append(newRelations, rel)
+			}
+		}
+		affected.Relations = newRelations
+		affected.UpdatedAt = time.Now().UTC()
+		if err := s.storage.Save(affected); err != nil {
+			return fmt.Errorf("failed to update relations in task %d: %w", affectedID, err)
+		}
+		s.index.Set(affected)
+	}
+
 	if err := s.storage.Delete(t.ID); err != nil {
 		return err
 	}
@@ -264,6 +309,15 @@ func (s *Service) StartTask(id int) (*Task, error) {
 
 	if t.Status != StatusTodo {
 		return nil, fmt.Errorf("task %d is not in todo status (current: %s)", id, t.Status)
+	}
+
+	// Check if task is blocked
+	if blocked, blockers := s.IsBlocked(id); blocked {
+		var parts []string
+		for _, b := range blockers {
+			parts = append(parts, fmt.Sprintf("%d (%s)", b.TaskID, b.Status))
+		}
+		return nil, fmt.Errorf("task %d is blocked by tasks: %s", id, strings.Join(parts, ", "))
 	}
 
 	// Auto-start parent if this is a subtask
@@ -332,6 +386,126 @@ func (s *Service) CompleteTask(id int) (*Task, error) {
 	}
 
 	return completed, nil
+}
+
+// BlockingInfo describes a task that is blocking another
+type BlockingInfo struct {
+	TaskID int    `json:"task_id"`
+	Status Status `json:"status"`
+	Title  string `json:"title"`
+}
+
+// AddRelation adds a relation between two tasks
+func (s *Service) AddRelation(source int, relationType string, target int) error {
+	// Validate no self-reference
+	if source == target {
+		return fmt.Errorf("cannot create relation: source and target are the same task (%d)", source)
+	}
+
+	// Validate relation type
+	if s.config != nil && !s.config.IsValidRelationType(relationType) {
+		return fmt.Errorf("invalid relation type: %s", relationType)
+	}
+
+	// Validate source task exists
+	srcTask, err := s.Get(source)
+	if err != nil {
+		return fmt.Errorf("source task not found: %d", source)
+	}
+
+	// Validate target task exists
+	if _, err := s.Get(target); err != nil {
+		return fmt.Errorf("target task not found: %d", target)
+	}
+
+	// Check for duplicate
+	for _, rel := range srcTask.Relations {
+		if rel.Type == relationType && rel.Task == target {
+			return fmt.Errorf("relation already exists: %s from %d to %d", relationType, source, target)
+		}
+	}
+
+	// Ensure directory exists for write operation
+	if err := s.storage.EnsureDir(); err != nil {
+		return err
+	}
+
+	// Add relation to source task's frontmatter
+	srcTask.Relations = append(srcTask.Relations, Relation{Type: relationType, Task: target})
+	srcTask.UpdatedAt = time.Now().UTC()
+
+	if err := s.storage.Save(srcTask); err != nil {
+		return err
+	}
+
+	s.index.Set(srcTask)
+
+	// Update index
+	s.index.AddRelation(RelationEdge{Type: relationType, Source: source, Target: target})
+
+	return s.index.Save()
+}
+
+// RemoveRelation removes a relation between two tasks
+func (s *Service) RemoveRelation(source int, relationType string, target int) error {
+	srcTask, err := s.Get(source)
+	if err != nil {
+		return fmt.Errorf("source task not found: %d", source)
+	}
+
+	// Find and remove the relation from frontmatter
+	found := false
+	var newRelations []Relation
+	for _, rel := range srcTask.Relations {
+		if rel.Type == relationType && rel.Task == target {
+			found = true
+			continue
+		}
+		newRelations = append(newRelations, rel)
+	}
+
+	if !found {
+		return fmt.Errorf("relation not found: %s from %d to %d", relationType, source, target)
+	}
+
+	srcTask.Relations = newRelations
+	srcTask.UpdatedAt = time.Now().UTC()
+
+	if err := s.storage.Save(srcTask); err != nil {
+		return err
+	}
+
+	s.index.Set(srcTask)
+
+	// Update index
+	s.index.RemoveRelation(RelationEdge{Type: relationType, Source: source, Target: target})
+
+	return s.index.Save()
+}
+
+// IsBlocked checks if a task has unresolved blocked_by relations
+func (s *Service) IsBlocked(taskID int) (bool, []BlockingInfo) {
+	blockerIDs := s.index.GetBlockers(taskID)
+	if len(blockerIDs) == 0 {
+		return false, nil
+	}
+
+	var blockers []BlockingInfo
+	for _, id := range blockerIDs {
+		t, ok := s.index.Get(id)
+		if !ok {
+			continue
+		}
+		if t.Status != StatusDone {
+			blockers = append(blockers, BlockingInfo{
+				TaskID: t.ID,
+				Status: t.Status,
+				Title:  t.Title,
+			})
+		}
+	}
+
+	return len(blockers) > 0, blockers
 }
 
 // isValidType checks if task type is valid
