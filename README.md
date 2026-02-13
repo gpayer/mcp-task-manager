@@ -150,6 +150,24 @@ claude mcp add --transport stdio task-manager -- mcp-task-manager
 
 Use the `/mcp-task-manager:superpowers-workflow` skill to automatically execute pending tasks with planning, implementation, and code review phases.
 
+### Codex Integration
+
+**Add the MCP server:**
+
+```bash
+codex mcp add task-manager -- mcp-task-manager
+```
+
+**Paste into Codex to install the skill and command:**
+
+```text
+Fetch https://raw.githubusercontent.com/gpayer/mcp-task-manager/main/.codex/INSTALL.md and execute the installation steps exactly.
+```
+
+**Usage:**
+
+Use the `$superpowers-workflow` skill to automatically execute pending tasks with planning, implementation, and code review phases.
+
 ## MCP Tools
 
 ### Task Management
