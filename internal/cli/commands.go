@@ -58,7 +58,7 @@ func checkProjectExists(stderr io.Writer, cfg *config.Config) int {
 }
 
 // cmdList handles the list command
-func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskType string, parentID int) int {
+func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskType string, parentID int, archived bool) int {
 	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -74,6 +74,26 @@ func cmdList(stdout, stderr io.Writer, jsonOutput bool, status, priority, taskTy
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
+	}
+
+	if archived {
+		tasks, err := svc.ListArchived()
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+		if jsonOutput {
+			if tasks == nil {
+				tasks = []*task.Task{}
+			}
+			if err := FormatJSON(stdout, tasks); err != nil {
+				fmt.Fprintf(stderr, "Error: %v\n", err)
+				return 1
+			}
+		} else {
+			fmt.Fprint(stdout, FormatTaskTable(tasks, nil, nil))
+		}
+		return 0
 	}
 
 	var statusPtr *task.Status
@@ -344,6 +364,32 @@ func cmdStart(stdout, stderr io.Writer, jsonOutput bool, id int) int {
 	}
 
 	msg := fmt.Sprintf("Task #%d started.", id)
+	if jsonOutput {
+		if err := FormatJSONMessage(stdout, msg, id); err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintln(stdout, msg)
+	}
+
+	return 0
+}
+
+// cmdArchive handles the archive command
+func cmdArchive(stdout, stderr io.Writer, jsonOutput bool, id int) int {
+	svc, _, err := initService()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if err := svc.ArchiveTask(id); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	msg := fmt.Sprintf("Task #%d archived.", id)
 	if jsonOutput {
 		if err := FormatJSONMessage(stdout, msg, id); err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)

@@ -285,6 +285,139 @@ func TestGetCommandNoProject(t *testing.T) {
 	}
 }
 
+func TestArchiveCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create, start, and complete a task
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Task to archive"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "start", "1"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "complete", "1"}, &stdout, &stderr)
+
+	// Archive it
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "archive", "1"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "archived") {
+		t.Errorf("expected 'archived' message, got: %s", stdout.String())
+	}
+}
+
+func TestArchiveCommandJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create, start, and complete a task
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Task to archive JSON"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "start", "1"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "complete", "1"}, &stdout, &stderr)
+
+	// Archive it with JSON output
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "archive", "1", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "archived") {
+		t.Errorf("expected 'archived' in JSON output, got: %s", output)
+	}
+}
+
+func TestArchiveCommandNotDone(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create a task but don't complete it
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Task not done"}, &stdout, &stderr)
+
+	// Try to archive it - should fail
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "archive", "1"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Errorf("expected exit code 1 for non-done task, got %d", code)
+	}
+}
+
+func TestListArchivedCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create, complete, and archive a task
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Archived task"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "start", "1"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "complete", "1"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "archive", "1"}, &stdout, &stderr)
+
+	// List archived tasks
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "list", "--archived"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Archived task") {
+		t.Errorf("expected archived task in output, got: %s", stdout.String())
+	}
+}
+
+func TestListArchivedCommandJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// Create, complete, and archive a task
+	var stdout, stderr bytes.Buffer
+	RunWithArgs([]string{"mcp-task-manager", "create", "Archived JSON task"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "start", "1"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "complete", "1"}, &stdout, &stderr)
+	RunWithArgs([]string{"mcp-task-manager", "archive", "1"}, &stdout, &stderr)
+
+	// List archived tasks as JSON
+	stdout.Reset()
+	stderr.Reset()
+	code := RunWithArgs([]string{"mcp-task-manager", "list", "--archived", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "[") {
+		t.Errorf("expected JSON array output, got: %s", output)
+	}
+	if !strings.Contains(output, "Archived JSON task") {
+		t.Errorf("expected archived task in JSON output, got: %s", output)
+	}
+}
+
+func TestListArchivedEmptyCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("MCP_TASKS_DIR", tmpDir)
+
+	// List archived tasks when none exist
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "list", "--archived"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "No tasks") {
+		t.Errorf("expected 'No tasks' message, got: %s", stdout.String())
+	}
+}
+
 func TestNextCommandNoProject(t *testing.T) {
 	// Run from a temp directory with no project markers
 	// Use a deeply nested temp dir to avoid any existing tasks/ or mcp-tasks.yaml in /tmp

@@ -40,11 +40,13 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	var listStatus, listPriority, listType string
 	var listJSON bool
 	var listParent int
+	var listArchived bool
 	listCmd.String(&listStatus, "s", "status", "Filter by status (todo|in_progress|done)")
 	listCmd.String(&listPriority, "p", "priority", "Filter by priority (critical|high|medium|low)")
 	listCmd.String(&listType, "t", "type", "Filter by type")
 	listCmd.Bool(&listJSON, "j", "json", "Output as JSON")
 	listCmd.Int(&listParent, "", "parent", "List subtasks of parent task ID (default: top-level tasks)")
+	listCmd.Bool(&listArchived, "a", "archived", "List archived tasks")
 	flaggy.AttachSubcommand(listCmd, 1)
 
 	// Get subcommand
@@ -124,6 +126,15 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	completeCmd.Bool(&completeJSON, "j", "json", "Output as JSON")
 	flaggy.AttachSubcommand(completeCmd, 1)
 
+	// Archive subcommand
+	archiveCmd := flaggy.NewSubcommand("archive")
+	archiveCmd.Description = "Archive a completed task"
+	var archiveIDStr string
+	var archiveJSON bool
+	archiveCmd.AddPositionalValue(&archiveIDStr, "id", 1, true, "Task ID")
+	archiveCmd.Bool(&archiveJSON, "j", "json", "Output as JSON")
+	flaggy.AttachSubcommand(archiveCmd, 1)
+
 	// Parse with custom args
 	flaggy.ParseArgs(args[1:])
 
@@ -134,7 +145,7 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if listCmd.Used {
-		return cmdList(stdout, stderr, listJSON, listStatus, listPriority, listType, listParent)
+		return cmdList(stdout, stderr, listJSON, listStatus, listPriority, listType, listParent, listArchived)
 	}
 
 	if getCmd.Used {
@@ -188,6 +199,15 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return cmdComplete(stdout, stderr, completeJSON, completeID)
+	}
+
+	if archiveCmd.Used {
+		archiveID, err := strconv.Atoi(archiveIDStr)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: invalid task ID: %s\n", archiveIDStr)
+			return 1
+		}
+		return cmdArchive(stdout, stderr, archiveJSON, archiveID)
 	}
 
 	return 0
