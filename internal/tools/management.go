@@ -106,8 +106,21 @@ func registerManagementTools(s *server.MCPServer, svc *task.Service, validTypes 
 		mcp.WithNumber("parent_id",
 			mcp.Description("Filter by parent task ID (0 for top-level tasks, omit for top-level by default)"),
 		),
+		mcp.WithBoolean("archived",
+			mcp.Description("If true, list archived tasks instead of active tasks"),
+		),
 	)
 	s.AddTool(listTool, listTasksHandler(svc))
+
+	// archive_task
+	archiveTool := mcp.NewTool("archive_task",
+		mcp.WithDescription("Archive a completed task (moves to archive directory)"),
+		mcp.WithNumber("id",
+			mcp.Required(),
+			mcp.Description("Task ID to archive"),
+		),
+	)
+	s.AddTool(archiveTool, archiveTaskHandler(svc))
 }
 
 func createTaskHandler(svc *task.Service) server.ToolHandlerFunc {
@@ -247,11 +260,37 @@ func deleteTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 	}
 }
 
+func archiveTaskHandler(svc *task.Service) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := req.GetInt("id", 0)
+		if err := svc.ArchiveTask(id); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(fmt.Sprintf("Task %d archived", id)), nil
+	}
+}
+
 func listTasksHandler(svc *task.Service) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// Check project exists for read operation
 		if err := svc.EnsureProjectExists(); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		// If archived flag is set, return archived tasks
+		if req.GetBool("archived", false) {
+			tasks, err := svc.ListArchived()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			if len(tasks) == 0 {
+				return mcp.NewToolResultText("No archived tasks found"), nil
+			}
+			data, err := json.MarshalIndent(tasks, "", "  ")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(string(data)), nil
 		}
 
 		var status *task.Status

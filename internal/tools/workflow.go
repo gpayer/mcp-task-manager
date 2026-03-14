@@ -73,6 +73,9 @@ func completeTaskHandler(svc *task.Service) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
+		// Trigger auto-archive check if enabled
+		_ = svc.RunAutoArchive()
+
 		return taskResult(t)
 	}
 }
