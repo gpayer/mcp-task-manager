@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1420,5 +1421,183 @@ func TestIndex_Integration_FullFlow(t *testing.T) {
 	}
 	if filtered[0].Description != "" {
 		t.Errorf("Filter() task has description %q, want empty", filtered[0].Description)
+	}
+}
+
+func makeTestTask(id int) *task.Task {
+	now := time.Now().UTC().Truncate(time.Second)
+	return &task.Task{
+		ID:          id,
+		Title:       fmt.Sprintf("Task %d", id),
+		Description: fmt.Sprintf("Description for task %d", id),
+		Status:      task.StatusDone,
+		Priority:    task.PriorityMedium,
+		Type:        "feature",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+}
+
+func TestMarkdownStorage_Archive(t *testing.T) {
+	dir := t.TempDir()
+	s := NewMarkdownStorage(dir)
+
+	tk := makeTestTask(1)
+	if err := s.Save(tk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Verify file exists before archiving
+	if _, err := os.Stat(filepath.Join(dir, "001.md")); os.IsNotExist(err) {
+		t.Fatal("expected 001.md to exist before archiving")
+	}
+
+	// Archive the task
+	if err := s.Archive(1); err != nil {
+		t.Fatalf("Archive() error = %v", err)
+	}
+
+	// Verify original file is gone
+	if _, err := os.Stat(filepath.Join(dir, "001.md")); !os.IsNotExist(err) {
+		t.Error("expected 001.md to be removed after archiving")
+	}
+
+	// Verify file exists in archive dir
+	if _, err := os.Stat(filepath.Join(dir, "archive", "001.md")); os.IsNotExist(err) {
+		t.Error("expected archive/001.md to exist after archiving")
+	}
+}
+
+func TestMarkdownStorage_Archive_NonExistent(t *testing.T) {
+	dir := t.TempDir()
+	s := NewMarkdownStorage(dir)
+
+	err := s.Archive(99)
+	if err == nil {
+		t.Error("Archive() of non-existent task should return error")
+	}
+}
+
+func TestMarkdownStorage_LoadArchived(t *testing.T) {
+	dir := t.TempDir()
+	s := NewMarkdownStorage(dir)
+
+	tk := makeTestTask(2)
+	if err := s.Save(tk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := s.Archive(2); err != nil {
+		t.Fatalf("Archive() error = %v", err)
+	}
+
+	loaded, err := s.LoadArchived(2)
+	if err != nil {
+		t.Fatalf("LoadArchived() error = %v", err)
+	}
+
+	if loaded.ID != tk.ID {
+		t.Errorf("ID = %d, want %d", loaded.ID, tk.ID)
+	}
+	if loaded.Title != tk.Title {
+		t.Errorf("Title = %q, want %q", loaded.Title, tk.Title)
+	}
+	if loaded.Description != tk.Description {
+		t.Errorf("Description = %q, want %q", loaded.Description, tk.Description)
+	}
+}
+
+func TestMarkdownStorage_LoadArchived_NonExistent(t *testing.T) {
+	dir := t.TempDir()
+	s := NewMarkdownStorage(dir)
+
+	_, err := s.LoadArchived(99)
+	if err == nil {
+		t.Error("LoadArchived() of non-existent archived task should return error")
+	}
+}
+
+func TestMarkdownStorage_LoadAllArchived(t *testing.T) {
+	dir := t.TempDir()
+	s := NewMarkdownStorage(dir)
+
+	// Save and archive three tasks
+	for i := 1; i <= 3; i++ {
+		tk := makeTestTask(i)
+		if err := s.Save(tk); err != nil {
+			t.Fatalf("Save(%d) error = %v", i, err)
+		}
+		if err := s.Archive(i); err != nil {
+			t.Fatalf("Archive(%d) error = %v", i, err)
+		}
+	}
+
+	// Save a non-archived task
+	tk4 := makeTestTask(4)
+	if err := s.Save(tk4); err != nil {
+		t.Fatalf("Save(4) error = %v", err)
+	}
+
+	archived, err := s.LoadAllArchived()
+	if err != nil {
+		t.Fatalf("LoadAllArchived() error = %v", err)
+	}
+
+	if len(archived) != 3 {
+		t.Errorf("LoadAllArchived() returned %d tasks, want 3", len(archived))
+	}
+
+	ids := make(map[int]bool)
+	for _, at := range archived {
+		ids[at.ID] = true
+	}
+	for i := 1; i <= 3; i++ {
+		if !ids[i] {
+			t.Errorf("expected archived task %d to be present", i)
+		}
+	}
+	if ids[4] {
+		t.Error("non-archived task 4 should not be in LoadAllArchived() result")
+	}
+}
+
+func TestMarkdownStorage_LoadAllArchived_Empty(t *testing.T) {
+	dir := t.TempDir()
+	s := NewMarkdownStorage(dir)
+
+	archived, err := s.LoadAllArchived()
+	if err != nil {
+		t.Fatalf("LoadAllArchived() on empty archive error = %v", err)
+	}
+	if len(archived) != 0 {
+		t.Errorf("LoadAllArchived() returned %d tasks, want 0", len(archived))
+	}
+}
+
+func TestMarkdownStorage_IsArchived(t *testing.T) {
+	dir := t.TempDir()
+	s := NewMarkdownStorage(dir)
+
+	tk := makeTestTask(5)
+	if err := s.Save(tk); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Before archiving
+	if s.IsArchived(5) {
+		t.Error("IsArchived(5) = true before archiving, want false")
+	}
+
+	if err := s.Archive(5); err != nil {
+		t.Fatalf("Archive() error = %v", err)
+	}
+
+	// After archiving
+	if !s.IsArchived(5) {
+		t.Error("IsArchived(5) = false after archiving, want true")
+	}
+
+	// Non-existent ID
+	if s.IsArchived(999) {
+		t.Error("IsArchived(999) = true for non-existent task, want false")
 	}
 }

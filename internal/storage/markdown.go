@@ -204,6 +204,67 @@ func parseTime(s string) (t time.Time, err error) {
 	return
 }
 
+// archivePath returns the file path for an archived task ID
+func (s *MarkdownStorage) archivePath(id int) string {
+	return filepath.Join(s.dir, "archive", fmt.Sprintf("%03d.md", id))
+}
+
+// Archive moves a task file from the tasks directory to the archive subdirectory
+func (s *MarkdownStorage) Archive(id int) error {
+	archiveDir := filepath.Join(s.dir, "archive")
+	if err := os.MkdirAll(archiveDir, 0755); err != nil {
+		return err
+	}
+	return os.Rename(s.taskPath(id), s.archivePath(id))
+}
+
+// LoadArchived reads an archived task from the archive directory
+func (s *MarkdownStorage) LoadArchived(id int) (*task.Task, error) {
+	data, err := os.ReadFile(s.archivePath(id))
+	if err != nil {
+		return nil, err
+	}
+	return s.parse(data)
+}
+
+// LoadAllArchived reads all archived tasks from the archive subdirectory
+func (s *MarkdownStorage) LoadAllArchived() ([]*task.Task, error) {
+	archiveDir := filepath.Join(s.dir, "archive")
+	entries, err := os.ReadDir(archiveDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var tasks []*task.Task
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+
+		data, err := os.ReadFile(filepath.Join(archiveDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+
+		t, err := s.parse(data)
+		if err != nil {
+			continue
+		}
+		tasks = append(tasks, t)
+	}
+
+	return tasks, nil
+}
+
+// IsArchived checks whether a task exists in the archive directory
+func (s *MarkdownStorage) IsArchived(id int) bool {
+	_, err := os.Stat(s.archivePath(id))
+	return err == nil
+}
+
 // NextID returns the next available task ID
 func (s *MarkdownStorage) NextID() (int, error) {
 	entries, err := os.ReadDir(s.dir)
