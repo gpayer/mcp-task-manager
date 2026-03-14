@@ -23,6 +23,7 @@ A Go-based MCP server for task management, designed for Claude and coding agents
          │                        │
          ▼                        ▼
     ./tasks/*.md           ./tasks/.index.json
+    ./tasks/archive/*.md   (archived tasks, no index)
 ```
 
 ## Development Process
@@ -52,6 +53,7 @@ Use the **cclsp MCP tools** (LSP server access) for code navigation:
 
 ### Storage
 - **Source of truth:** Markdown files with YAML frontmatter (`./tasks/*.md`)
+- **Archive:** `./tasks/archive/*.md` — archived tasks (same format, no index)
 - **Index cache:** `./tasks/.index.json` - rebuildable from .md files on startup
 - **Location:** Project-local by default, configurable via `MCP_TASKS_DIR` env var
 - **Config file:** `./mcp-tasks.yaml`
@@ -85,6 +87,7 @@ Markdown description here.
 ### Task Lifecycle
 - Simple 3-state workflow: `todo` → `in_progress` → `done`
 - Blocked state derived from `blocked_by` relations (see Relations section)
+- Completed tasks can be archived (see Archiving section)
 
 ### Priority Ordering
 - Named levels: `critical` > `high` > `medium` > `low`
@@ -146,6 +149,25 @@ Relation types are configurable via `mcp-tasks.yaml`. Behavioral effects are har
 - Relations and subtasks are orthogonal — a subtask can be blocked by a task outside its parent
 - `get_next_task` applies both filters: skip parents with incomplete subtasks AND skip blocked tasks
 
+### Archiving
+
+Completed tasks can be archived to keep the active task list clean and the index small.
+
+**Storage:**
+- Archived files move to `tasks/archive/` (same markdown format, unchanged)
+- No archive index — queries against archived tasks do a linear scan of `archive/*.md`
+- Active index shrinks as tasks are archived
+
+**Archive Rules:**
+- Only `done` tasks can be archived
+- Archiving a parent requires all subtasks to be `done`; archives the entire tree
+- All relations to/from archived tasks are cleaned up (same as delete cascade)
+- Archived tasks are read-only: can be listed and viewed, but not updated/started/completed
+
+**Auto-Archive:**
+- When enabled in config, done tasks older than `after_days` (since `updated_at`) are automatically archived
+- Triggers on startup and after each `complete_task` call
+
 ## MCP Tools
 
 ### Task Management
@@ -153,9 +175,10 @@ Relation types are configurable via `mcp-tasks.yaml`. Behavioral effects are har
 |------|-------------|
 | `create_task` | Create a new task with title, description, priority, type, and optional `parent_id` for subtasks |
 | `update_task` | Modify task fields |
-| `list_tasks` | List tasks with optional filters (status, priority, type, parent_id); top-level tasks by default |
-| `get_task` | Get full details of a task by ID (includes subtasks for parent tasks) |
+| `list_tasks` | List tasks with optional filters (status, priority, type, parent_id, archived); top-level tasks by default |
+| `get_task` | Get full details of a task by ID (includes subtasks for parent tasks; falls back to archive) |
 | `delete_task` | Remove a task; use `delete_subtasks: true` to cascade delete subtasks |
+| `archive_task` | Archive a completed task (moves to `tasks/archive/`) |
 
 ### Relations
 | Tool | Description |
@@ -168,7 +191,7 @@ Relation types are configurable via `mcp-tasks.yaml`. Behavioral effects are har
 |------|-------------|
 | `get_next_task` | Returns highest priority `todo` task (skips parents with incomplete subtasks and blocked tasks) |
 | `start_task` | Move task from `todo` to `in_progress` (auto-starts parent if subtask; refuses if blocked) |
-| `complete_task` | Move task from `in_progress` to `done` (auto-completes parent if last subtask) |
+| `complete_task` | Move task from `in_progress` to `done` (auto-completes parent if last subtask; triggers auto-archive if enabled) |
 
 ## Configuration
 
@@ -181,6 +204,9 @@ relation_types:       # optional, defaults to these three
   - blocked_by
   - relates_to
   - duplicate_of
+auto_archive:         # optional
+  enabled: false      # default: false
+  after_days: 30      # default: 30
 ```
 
 Override data directory: `MCP_TASKS_DIR=/path/to/tasks`
@@ -255,3 +281,5 @@ mcp-task-manager/
 - Comments/history
 - Cycle detection for `blocked_by` chains
 - Additional task types (chore, docs, refactor)
+- `unarchive` / restore task from archive back to active
+- Archive index (only needed if archive query performance becomes a problem)
