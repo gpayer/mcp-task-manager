@@ -7,12 +7,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// AutoArchiveConfig holds configuration for automatic task archiving
+type AutoArchiveConfig struct {
+	Enabled   bool `yaml:"enabled"`
+	AfterDays int  `yaml:"after_days"`
+}
+
 // Config holds application configuration
 type Config struct {
-	TaskTypes     []string `yaml:"task_types"`
-	RelationTypes []string `yaml:"relation_types,omitempty"`
-	DataDir       string   `yaml:"-"` // Set from env or default
-	ProjectFound  bool     `yaml:"-"` // Whether an existing project was discovered
+	TaskTypes     []string          `yaml:"task_types"`
+	RelationTypes []string          `yaml:"relation_types,omitempty"`
+	AutoArchive   AutoArchiveConfig `yaml:"auto_archive"`
+	DataDir       string            `yaml:"-"` // Set from env or default
+	ProjectFound  bool              `yaml:"-"` // Whether an existing project was discovered
 }
 
 // DefaultRelationTypes returns the default relation types
@@ -24,6 +31,10 @@ func DefaultConfig() *Config {
 		TaskTypes:     []string{"feature", "bug"},
 		RelationTypes: DefaultRelationTypes,
 		DataDir:       "./tasks",
+		AutoArchive: AutoArchiveConfig{
+			Enabled:   false,
+			AfterDays: 30,
+		},
 	}
 }
 

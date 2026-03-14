@@ -383,6 +383,98 @@ func TestLoad_LoadsConfigFromProjectRoot(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_AutoArchive(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.AutoArchive.Enabled != false {
+		t.Errorf("DefaultConfig().AutoArchive.Enabled = %v, want false", cfg.AutoArchive.Enabled)
+	}
+
+	if cfg.AutoArchive.AfterDays != 30 {
+		t.Errorf("DefaultConfig().AutoArchive.AfterDays = %d, want 30", cfg.AutoArchive.AfterDays)
+	}
+}
+
+func TestLoad_AutoArchiveFromYAML(t *testing.T) {
+	// Create temp directory with config file containing auto_archive section
+	tmpDir := t.TempDir()
+
+	configContent := `task_types:
+  - feature
+  - bug
+auto_archive:
+  enabled: true
+  after_days: 60
+`
+	configPath := filepath.Join(tmpDir, "mcp-tasks.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to create config file: %v", err)
+	}
+
+	// Clear env var
+	oldVal := os.Getenv("MCP_TASKS_DIR")
+	defer os.Setenv("MCP_TASKS_DIR", oldVal)
+	os.Unsetenv("MCP_TASKS_DIR")
+
+	// Save and restore cwd
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.AutoArchive.Enabled {
+		t.Errorf("Load() AutoArchive.Enabled = false, want true")
+	}
+
+	if cfg.AutoArchive.AfterDays != 60 {
+		t.Errorf("Load() AutoArchive.AfterDays = %d, want 60", cfg.AutoArchive.AfterDays)
+	}
+}
+
+func TestLoad_AutoArchiveDefaults_WhenNotInYAML(t *testing.T) {
+	// Create temp directory with config file that does NOT contain auto_archive
+	tmpDir := t.TempDir()
+
+	configContent := "task_types:\n  - feature\n  - bug\n"
+	configPath := filepath.Join(tmpDir, "mcp-tasks.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to create config file: %v", err)
+	}
+
+	// Clear env var
+	oldVal := os.Getenv("MCP_TASKS_DIR")
+	defer os.Setenv("MCP_TASKS_DIR", oldVal)
+	os.Unsetenv("MCP_TASKS_DIR")
+
+	// Save and restore cwd
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.AutoArchive.Enabled != false {
+		t.Errorf("Load() AutoArchive.Enabled = %v, want false (default)", cfg.AutoArchive.Enabled)
+	}
+
+	if cfg.AutoArchive.AfterDays != 30 {
+		t.Errorf("Load() AutoArchive.AfterDays = %d, want 30 (default)", cfg.AutoArchive.AfterDays)
+	}
+}
+
 func TestLoad_EnvVarLoadsConfigFromParentDir(t *testing.T) {
 	// Create temp directory structure
 	tmpDir := t.TempDir()
