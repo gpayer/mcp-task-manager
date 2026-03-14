@@ -1,3 +1,6 @@
 task_types:
   - feature
   - bug
+auto_archive:
+  enabled: true
+  after_days: 30
