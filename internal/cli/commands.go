@@ -23,7 +23,7 @@ func initServiceWithConfig(cfg *config.Config) (*task.Service, error) {
 	tasksDir := cfg.TasksDir()
 	mdStorage := storage.NewMarkdownStorage(tasksDir)
 	index := storage.NewIndex(tasksDir, mdStorage)
-	svc := task.NewService(mdStorage, index, cfg.TaskTypes, cfg)
+	svc := task.NewService(mdStorage, mdStorage, index, cfg.TaskTypes, cfg)
 
 	if err := svc.Initialize(); err != nil {
 		return nil, fmt.Errorf("failed to initialize: %w", err)

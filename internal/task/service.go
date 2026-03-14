@@ -3,6 +3,7 @@ package task
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -56,21 +57,31 @@ type Index interface {
 	RemoveAllRelationsForTask(taskID int) []RelationEdge
 }
 
+// ArchiveStorage extends Storage with archive-specific operations
+type ArchiveStorage interface {
+	Archive(id int) error
+	LoadArchived(id int) (*Task, error)
+	LoadAllArchived() ([]*Task, error)
+	IsArchived(id int) bool
+}
+
 // Service provides task management operations
 type Service struct {
-	storage    Storage
-	index      Index
-	validTypes []string
-	config     *config.Config
+	storage        Storage
+	archiveStorage ArchiveStorage
+	index          Index
+	validTypes     []string
+	config         *config.Config
 }
 
 // NewService creates a new task service
-func NewService(storage Storage, index Index, validTypes []string, cfg *config.Config) *Service {
+func NewService(storage Storage, archiveStorage ArchiveStorage, index Index, validTypes []string, cfg *config.Config) *Service {
 	return &Service{
-		storage:    storage,
-		index:      index,
-		validTypes: validTypes,
-		config:     cfg,
+		storage:        storage,
+		archiveStorage: archiveStorage,
+		index:          index,
+		validTypes:     validTypes,
+		config:         cfg,
 	}
 }
 
@@ -91,7 +102,17 @@ func (s *Service) ProjectFound() bool {
 // Initialize loads the index if directory exists (does not create directory)
 func (s *Service) Initialize() error {
 	// Only load index, don't create directory - that happens on first write
-	return s.index.Load()
+	if err := s.index.Load(); err != nil {
+		return err
+	}
+	// Run auto-archive on startup if enabled
+	if s.config != nil && s.config.AutoArchive.Enabled {
+		if err := s.RunAutoArchive(); err != nil {
+			// Log but don't fail startup
+			log.Printf("auto-archive on startup failed: %v", err)
+		}
+	}
+	return nil
 }
 
 // Create creates a new task (optionally as a subtask)
@@ -152,13 +173,20 @@ func (s *Service) CreateSubtask(title, description string, priority Priority, ta
 	return s.Create(title, description, priority, taskType, &parentID)
 }
 
-// Get returns a task by ID with full description loaded from disk
+// Get returns a task by ID with full description loaded from disk.
+// Falls back to the archive if the task is not found in the active index.
 func (s *Service) Get(id int) (*Task, error) {
 	t, ok := s.index.Get(id)
-	if !ok {
-		return nil, fmt.Errorf("task not found: %d", id)
+	if ok {
+		return t, nil
 	}
-	return t, nil
+	// Fall back to archive
+	if s.archiveStorage != nil {
+		if archived, err := s.archiveStorage.LoadArchived(id); err == nil {
+			return archived, nil
+		}
+	}
+	return nil, fmt.Errorf("task not found: %d", id)
 }
 
 // GetWithSubtasks returns a task and its subtasks in one call
@@ -506,6 +534,136 @@ func (s *Service) IsBlocked(taskID int) (bool, []BlockingInfo) {
 	}
 
 	return len(blockers) > 0, blockers
+}
+
+// ArchiveTask moves a done task (and its subtasks) to the archive
+func (s *Service) ArchiveTask(id int) error {
+	t, ok := s.index.Get(id)
+	if !ok {
+		return fmt.Errorf("task not found: %d", id)
+	}
+	if t.Status != StatusDone {
+		return fmt.Errorf("task %d is not done (current: %s); only done tasks can be archived", id, t.Status)
+	}
+	if s.archiveStorage == nil {
+		return fmt.Errorf("archive storage not available")
+	}
+
+	// If the task has subtasks, verify all are done and archive them first
+	if s.index.HasSubtasks(id) {
+		subtasks := s.index.GetSubtasks(id)
+		for _, sub := range subtasks {
+			if sub.Status != StatusDone {
+				return fmt.Errorf("cannot archive task %d: subtask %d is not done (current: %s)", id, sub.ID, sub.Status)
+			}
+		}
+		// Archive all subtasks first
+		for _, sub := range subtasks {
+			// Clean relations for each subtask
+			removedEdges := s.index.RemoveAllRelationsForTask(sub.ID)
+			if err := s.updateAffectedRelationTasks(sub.ID, removedEdges); err != nil {
+				return err
+			}
+			if err := s.archiveStorage.Archive(sub.ID); err != nil {
+				return fmt.Errorf("failed to archive subtask %d: %w", sub.ID, err)
+			}
+			s.index.Delete(sub.ID)
+		}
+	}
+
+	// Clean relations for the main task
+	removedEdges := s.index.RemoveAllRelationsForTask(id)
+	if err := s.updateAffectedRelationTasks(id, removedEdges); err != nil {
+		return err
+	}
+
+	// Move the file to archive
+	if err := s.archiveStorage.Archive(id); err != nil {
+		return fmt.Errorf("failed to archive task %d: %w", id, err)
+	}
+
+	s.index.Delete(id)
+	return s.index.Save()
+}
+
+// updateAffectedRelationTasks updates frontmatter of tasks whose relations pointed to taskID
+func (s *Service) updateAffectedRelationTasks(taskID int, removedEdges []RelationEdge) error {
+	affectedTasks := make(map[int]bool)
+	for _, edge := range removedEdges {
+		if edge.Source != taskID {
+			affectedTasks[edge.Source] = true
+		}
+	}
+	for affectedID := range affectedTasks {
+		affected, ok := s.index.Get(affectedID)
+		if !ok {
+			continue
+		}
+		var newRelations []Relation
+		for _, rel := range affected.Relations {
+			if rel.Task != taskID {
+				newRelations = append(newRelations, rel)
+			}
+		}
+		affected.Relations = newRelations
+		affected.UpdatedAt = time.Now().UTC()
+		if err := s.storage.Save(affected); err != nil {
+			return fmt.Errorf("failed to update relations in task %d: %w", affectedID, err)
+		}
+		s.index.Set(affected)
+	}
+	return nil
+}
+
+// GetAutoArchiveCandidates returns done tasks that are eligible for auto-archiving
+func (s *Service) GetAutoArchiveCandidates() []*Task {
+	if s.config == nil {
+		return nil
+	}
+	threshold := time.Now().UTC().AddDate(0, 0, -s.config.AutoArchive.AfterDays)
+
+	doneTasks := s.index.Filter(&[]Status{StatusDone}[0], nil, nil, nil)
+	var candidates []*Task
+	for _, t := range doneTasks {
+		if t.UpdatedAt.After(threshold) {
+			continue
+		}
+		// Only return top-level tasks or subtasks whose parent is also done
+		if t.ParentID != nil {
+			parent, ok := s.index.Get(*t.ParentID)
+			if !ok || parent.Status != StatusDone {
+				continue
+			}
+		}
+		candidates = append(candidates, t)
+	}
+	return candidates
+}
+
+// RunAutoArchive archives all eligible candidates; skips individual failures
+func (s *Service) RunAutoArchive() error {
+	if s.config == nil || !s.config.AutoArchive.Enabled {
+		return nil
+	}
+	candidates := s.GetAutoArchiveCandidates()
+	for _, t := range candidates {
+		// Skip tasks already archived (may have been archived as subtasks)
+		if _, ok := s.index.Get(t.ID); !ok {
+			continue
+		}
+		if err := s.ArchiveTask(t.ID); err != nil {
+			log.Printf("auto-archive: failed to archive task %d: %v", t.ID, err)
+		}
+	}
+	return nil
+}
+
+// ListArchived returns all archived tasks (linear scan of archive directory)
+func (s *Service) ListArchived() ([]*Task, error) {
+	if s.archiveStorage == nil {
+		return nil, fmt.Errorf("archive storage not available")
+	}
+	return s.archiveStorage.LoadAllArchived()
 }
 
 // isValidType checks if task type is valid
