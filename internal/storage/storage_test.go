@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gpayer/mcp-task-manager/internal/config"
 	"github.com/gpayer/mcp-task-manager/internal/task"
 )
 
@@ -324,6 +325,31 @@ func TestIndex_SaveAndLoad(t *testing.T) {
 	}
 	if got.Title != tk.Title {
 		t.Errorf("Title after Load() = %q, want %q", got.Title, tk.Title)
+	}
+}
+
+func TestService_Initialize_EmptyProjectDoesNotCreateTasksDirOrIndex(t *testing.T) {
+	root := t.TempDir()
+	tasksDir := filepath.Join(root, "tasks")
+
+	storageBackend := NewMarkdownStorage(tasksDir)
+	idx := NewIndex(tasksDir, storageBackend)
+	cfg := &config.Config{
+		TaskTypes:    []string{"feature", "bug"},
+		ProjectFound: true,
+	}
+	svc := task.NewService(storageBackend, nil, idx, cfg.TaskTypes, cfg)
+
+	if err := svc.Initialize(); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	if _, err := os.Stat(tasksDir); !os.IsNotExist(err) {
+		t.Fatalf("expected tasks directory to remain absent, got err = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tasksDir, ".index.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .index.json file, got err = %v", err)
 	}
 }
 
