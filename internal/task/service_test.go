@@ -1,11 +1,37 @@
-package task
+package task_test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gpayer/mcp-task-manager/internal/config"
+	"github.com/gpayer/mcp-task-manager/internal/storage"
+	task "github.com/gpayer/mcp-task-manager/internal/task"
+)
+
+type Task = task.Task
+type Status = task.Status
+type Priority = task.Priority
+type RelationEdge = task.RelationEdge
+type Service = task.Service
+
+var (
+	NewService        = task.NewService
+	ErrNoProjectFound = task.ErrNoProjectFound
+)
+
+const (
+	StatusTodo       = task.StatusTodo
+	StatusInProgress = task.StatusInProgress
+	StatusDone       = task.StatusDone
+
+	PriorityCritical = task.PriorityCritical
+	PriorityHigh     = task.PriorityHigh
+	PriorityMedium   = task.PriorityMedium
+	PriorityLow      = task.PriorityLow
 )
 
 // mockArchiveStorage implements ArchiveStorage interface for testing.
@@ -309,6 +335,31 @@ func TestService_Create(t *testing.T) {
 	}
 	if task.Status != StatusTodo {
 		t.Errorf("Status = %q, want %q", task.Status, StatusTodo)
+	}
+}
+
+func TestService_Initialize_EmptyProjectDoesNotCreateTasksDirOrIndex(t *testing.T) {
+	root := t.TempDir()
+	tasksDir := filepath.Join(root, "tasks")
+
+	storageBackend := storage.NewMarkdownStorage(tasksDir)
+	idx := storage.NewIndex(tasksDir, storageBackend)
+	cfg := &config.Config{
+		TaskTypes:    []string{"feature", "bug"},
+		ProjectFound: true,
+	}
+	svc := NewService(storageBackend, nil, idx, cfg.TaskTypes, cfg)
+
+	if err := svc.Initialize(); err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	if _, err := os.Stat(tasksDir); !os.IsNotExist(err) {
+		t.Fatalf("expected tasks directory to remain absent, got err = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tasksDir, ".index.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .index.json file, got err = %v", err)
 	}
 }
 
@@ -1482,6 +1533,7 @@ func TestService_ListArchived(t *testing.T) {
 func TestService_GetAutoArchiveCandidates(t *testing.T) {
 	ms := newMockStorage()
 	as := newMockArchiveStorage(ms)
+	idx := newMockIndex()
 	cfg := &config.Config{
 		TaskTypes:     []string{"feature", "bug"},
 		RelationTypes: config.DefaultRelationTypes,
@@ -1490,7 +1542,7 @@ func TestService_GetAutoArchiveCandidates(t *testing.T) {
 			AfterDays: 30,
 		},
 	}
-	svc := NewService(ms, as, newMockIndex(), cfg.TaskTypes, cfg)
+	svc := NewService(ms, as, idx, cfg.TaskTypes, cfg)
 	svc.Initialize()
 
 	// Create a task and manually set UpdatedAt to 31 days ago
@@ -1515,7 +1567,7 @@ func TestService_GetAutoArchiveCandidates(t *testing.T) {
 	// The index entry needs the backdated time too
 	// Re-set in index via the mock
 	if t1, ok := ms.tasks[task1.ID]; ok {
-		svc.index.Set(t1)
+		idx.Set(t1)
 	}
 
 	candidates := svc.GetAutoArchiveCandidates()

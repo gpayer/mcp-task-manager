@@ -327,6 +327,43 @@ func TestIndex_SaveAndLoad(t *testing.T) {
 	}
 }
 
+func TestIndex_Load_MissingTasksDirDoesNotCreateIndexFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "tasks")
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := idx.All(); len(got) != 0 {
+		t.Fatalf("All() returned %d tasks, want 0", len(got))
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".index.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .index.json file, got err = %v", err)
+	}
+}
+
+func TestIndex_Load_EmptyTasksDirDoesNotCreateIndexFile(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := idx.All(); len(got) != 0 {
+		t.Fatalf("All() returned %d tasks, want 0", len(got))
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".index.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .index.json file, got err = %v", err)
+	}
+}
+
 func TestMarkdownStorage_SaveLoad_WithParentID(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewMarkdownStorage(dir)
