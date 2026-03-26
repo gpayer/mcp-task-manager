@@ -124,22 +124,20 @@ func (idx *Index) indexPath() string {
 	return filepath.Join(idx.dir, ".index.json")
 }
 
-// Rebuild scans all markdown files and rebuilds the index
-func (idx *Index) Rebuild() error {
-	tasks, err := idx.storage.LoadAll()
-	if err != nil {
-		return err
-	}
-
+func (idx *Index) reset() {
 	idx.entries = make(map[int]*IndexEntry)
 	idx.relationsBySource = make(map[int][]task.RelationEdge)
 	idx.relationsByTarget = make(map[int][]task.RelationEdge)
+}
+
+func (idx *Index) rebuildFromTasks(tasks []*task.Task) error {
+	idx.reset()
 
 	for _, t := range tasks {
 		idx.entries[t.ID] = taskToEntry(t)
 	}
 
-	// Build relation edges from task frontmatter
+	// Build relation edges from task frontmatter.
 	for _, t := range tasks {
 		for _, rel := range t.Relations {
 			edge := task.RelationEdge{
@@ -148,7 +146,7 @@ func (idx *Index) Rebuild() error {
 				Target: rel.Task,
 			}
 			idx.addEdge(edge)
-			// Symmetric types generate a reverse edge
+			// Symmetric types generate a reverse edge.
 			if rel.Type == SymmetricRelationType {
 				reverse := task.RelationEdge{
 					Type:   rel.Type,
@@ -160,7 +158,21 @@ func (idx *Index) Rebuild() error {
 		}
 	}
 
+	if len(tasks) == 0 {
+		return nil
+	}
+
 	return idx.Save()
+}
+
+// Rebuild scans all markdown files and rebuilds the index
+func (idx *Index) Rebuild() error {
+	tasks, err := idx.storage.LoadAll()
+	if err != nil {
+		return err
+	}
+
+	return idx.rebuildFromTasks(tasks)
 }
 
 // Save persists the index to disk
@@ -218,7 +230,10 @@ func (idx *Index) Save() error {
 func (idx *Index) Load() error {
 	data, err := os.ReadFile(idx.indexPath())
 	if err != nil {
-		return idx.Rebuild() // Missing index
+		if os.IsNotExist(err) {
+			return idx.Rebuild()
+		}
+		return err
 	}
 
 	var indexFile IndexFile
