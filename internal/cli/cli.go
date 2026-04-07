@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/integrii/flaggy"
 )
@@ -22,6 +23,15 @@ func Run() {
 func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	// Reset flaggy for fresh parsing
 	flaggy.ResetParser()
+
+	taskTypes := []string{"feature", "bug"}
+	if cfg, err := loadConfig(); err == nil && len(cfg.TaskTypes) > 0 {
+		taskTypes = cfg.TaskTypes
+	}
+	defaultTaskType := "feature"
+	if len(taskTypes) > 0 {
+		defaultTaskType = taskTypes[0]
+	}
 
 	flaggy.SetName("mcp-task-manager")
 	flaggy.SetDescription("Task manager for Claude and coding agents")
@@ -43,7 +53,7 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	var listArchived bool
 	listCmd.String(&listStatus, "s", "status", "Filter by status (todo|in_progress|done)")
 	listCmd.String(&listPriority, "p", "priority", "Filter by priority (critical|high|medium|low)")
-	listCmd.String(&listType, "t", "type", "Filter by type")
+	listCmd.String(&listType, "t", "type", fmt.Sprintf("Filter by type (%s)", strings.Join(taskTypes, "|")))
 	listCmd.Bool(&listJSON, "j", "json", "Output as JSON")
 	listCmd.Int(&listParent, "", "parent", "List subtasks of parent task ID (default: top-level tasks)")
 	listCmd.Bool(&listArchived, "a", "archived", "List archived tasks")
@@ -70,13 +80,13 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	createCmd.Description = "Create a new task"
 	var createTitle string
 	var createPriority = "medium"
-	var createType = "feature"
+	var createType = defaultTaskType
 	var createDesc string
 	var createJSON bool
 	var createParent int
 	createCmd.AddPositionalValue(&createTitle, "title", 1, true, "Task title")
 	createCmd.String(&createPriority, "p", "priority", "Priority (default: medium)")
-	createCmd.String(&createType, "t", "type", "Type (default: feature)")
+	createCmd.String(&createType, "t", "type", fmt.Sprintf("Type (%s; default: %s)", strings.Join(taskTypes, "|"), defaultTaskType))
 	createCmd.String(&createDesc, "d", "description", "Task description")
 	createCmd.Bool(&createJSON, "j", "json", "Output as JSON")
 	createCmd.Int(&createParent, "", "parent", "Parent task ID (creates a subtask)")
@@ -92,7 +102,7 @@ func RunWithArgs(args []string, stdout, stderr io.Writer) int {
 	updateCmd.String(&updateTitle, "", "title", "New title")
 	updateCmd.String(&updateStatus, "s", "status", "New status")
 	updateCmd.String(&updatePriority, "p", "priority", "New priority")
-	updateCmd.String(&updateType, "t", "type", "New type")
+	updateCmd.String(&updateType, "t", "type", fmt.Sprintf("New type (%s)", strings.Join(taskTypes, "|")))
 	updateCmd.String(&updateDesc, "d", "description", "New description")
 	updateCmd.Bool(&updateJSON, "j", "json", "Output as JSON")
 	flaggy.AttachSubcommand(updateCmd, 1)

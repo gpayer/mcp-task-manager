@@ -98,10 +98,10 @@ mcp-task-manager --help
 
 | Command | Description |
 |---------|-------------|
-| `list` | List tasks with optional filters (`-s status`, `-p priority`, `-t type`) |
+| `list` | List tasks with optional filters (`-s status`, `-p priority`, `-t type`, where allowed task types depend on config and default to `feature`, `bug`) |
 | `get <id>` | Get task details by ID |
-| `create <title>` | Create task (defaults: priority=medium, type=feature); use `--parent` for subtasks |
-| `update <id>` | Update task fields |
+| `create <title>` | Create task (defaults: priority=`medium`, type=first configured task type; with default config that is `feature`; allowed task types depend on config and default to `feature`, `bug`); use `--parent` for subtasks |
+| `update <id>` | Update task fields, including `type` (allowed task types depend on config and default to `feature`, `bug`) |
 | `delete <id>` | Delete a task |
 | `next` | Get highest priority todo task |
 | `start <id>` | Move task to in_progress |
@@ -174,9 +174,9 @@ Use the `$superpowers-workflow` skill to automatically execute pending tasks wit
 
 | Tool | Description |
 |------|-------------|
-| `create_task` | Create a new task with title, description, priority, type, and optional `parent_id` for subtasks |
-| `update_task` | Modify task fields (title, description, status, priority, type) |
-| `list_tasks` | List tasks with optional filters (status, priority, type); use `parent_id` filter for subtasks |
+| `create_task` | Create a new task with title, description, priority, `type`, and optional `parent_id` for subtasks. Allowed task `type` values come from config and default to `feature`, `bug`. |
+| `update_task` | Modify task fields (title, description, status, priority, `type`). Allowed task `type` values come from config and default to `feature`, `bug`. |
+| `list_tasks` | List tasks with optional filters (status, priority, `type`); use `parent_id` filter for subtasks. Allowed task `type` values come from config and default to `feature`, `bug`. |
 | `get_task` | Get full details of a task by ID (includes subtasks for parent tasks) |
 | `delete_task` | Remove a task; use `delete_subtasks` to cascade |
 
@@ -187,6 +187,13 @@ Use the `$superpowers-workflow` skill to automatically execute pending tasks wit
 | `get_next_task` | Returns highest priority `todo` task |
 | `start_task` | Move task from `todo` to `in_progress` |
 | `complete_task` | Move task from `in_progress` to `done` |
+
+### Relations
+
+| Tool | Description |
+|------|-------------|
+| `add_relation` | Add a relation between two tasks. Allowed relation `type` values come from config and default to `blocked_by`, `relates_to`, `duplicate_of`. |
+| `remove_relation` | Remove a relation between two tasks. Allowed relation `type` values come from config and default to `blocked_by`, `relates_to`, `duplicate_of`. |
 
 ## Configuration
 
@@ -200,7 +207,14 @@ task_types:
   - bug
   - chore
   - docs
+relation_types:
+  - blocked_by
+  - relates_to
+  - duplicate_of
 ```
+
+The `task_types` list defines the allowed values for every task `type` field in the CLI, MCP tools, and task frontmatter. If omitted, the default allowed values are `feature` and `bug`.
+The `relation_types` list defines the allowed values for every relation `type` field in MCP tools and task metadata. If omitted, the default allowed values are `blocked_by`, `relates_to`, and `duplicate_of`.
 
 ### Environment Variables
 
@@ -229,6 +243,8 @@ Detailed description in Markdown format.
 - Implementation notes
 - Links and references
 ```
+
+The `type` field must be one of the configured `task_types` values. With the default configuration, allowed values are `feature` and `bug`.
 
 ### Status Values
 

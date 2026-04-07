@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -237,6 +238,70 @@ func TestCompleteCommand(t *testing.T) {
 	}
 }
 
+func TestTypeHelpTextIncludesAllowedValues(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := tmpDir + "/mcp-tasks.yaml"
+	if err := os.WriteFile(configPath, []byte("task_types:\n  - bug\n  - chore\n"), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	oldCwd, _ := os.Getwd()
+	defer os.Chdir(oldCwd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantOut string
+	}{
+		{
+			name:    "list",
+			args:    []string{"mcp-task-manager", "list", "--help"},
+			wantOut: "Filter by type (bug|chore)",
+		},
+		{
+			name:    "create",
+			args:    []string{"mcp-task-manager", "create", "--help"},
+			wantOut: "Type (bug|chore; default: bug)",
+		},
+		{
+			name:    "update",
+			args:    []string{"mcp-task-manager", "update", "--help"},
+			wantOut: "New type (bug|chore)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := runHelp(t, tt.args)
+			if !strings.Contains(output, tt.wantOut) {
+				t.Fatalf("help output = %q, want substring %q", output, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestCreateCommandUsesConfiguredDefaultType(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(tmpDir+"/mcp-tasks.yaml", []byte("task_types:\n  - bug\n  - chore\n"), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Setenv("MCP_TASKS_DIR", tmpDir+"/tasks")
+
+	var stdout, stderr bytes.Buffer
+	code := RunWithArgs([]string{"mcp-task-manager", "create", "Config default type"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "bug") {
+		t.Fatalf("expected created task to use configured default type 'bug', got: %s", stdout.String())
+	}
+}
+
 func TestListCommandNoProject(t *testing.T) {
 	// Run from a temp directory with no project markers
 	// Use a deeply nested temp dir to avoid any existing tasks/ or mcp-tasks.yaml in /tmp
@@ -259,6 +324,45 @@ func TestListCommandNoProject(t *testing.T) {
 	if !strings.Contains(stderr.String(), "no tasks directory found") {
 		t.Errorf("expected 'no tasks directory found' error, got: %s", stderr.String())
 	}
+}
+
+func runHelp(t *testing.T, args []string) string {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	rOut, wOut, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe stdout: %v", err)
+	}
+	rErr, wErr, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe stderr: %v", err)
+	}
+	os.Stdout = wOut
+	os.Stderr = wErr
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Logf("Recovered from panic (expected): %v", r)
+			}
+		}()
+		RunWithArgs(args, &stdout, &stderr)
+	}()
+	_ = wOut.Close()
+	_ = wErr.Close()
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+	var helpOutput bytes.Buffer
+	if _, err := io.Copy(&helpOutput, rOut); err != nil {
+		t.Fatalf("copy stdout: %v", err)
+	}
+	if _, err := io.Copy(&helpOutput, rErr); err != nil {
+		t.Fatalf("copy stderr: %v", err)
+	}
+	return stdout.String() + stderr.String() + helpOutput.String()
 }
 
 func TestGetCommandNoProject(t *testing.T) {
