@@ -1,6 +1,9 @@
 package tools
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/gpayer/mcp-task-manager/internal/task"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -10,4 +13,8 @@ func Register(s *server.MCPServer, svc *task.Service, validTypes []string, relat
 	registerManagementTools(s, svc, validTypes)
 	registerWorkflowTools(s, svc)
 	registerRelationTools(s, svc, relationTypes)
+}
+
+func allowedValuesDescription(label string, values []string) string {
+	return fmt.Sprintf("%s Allowed values: %s.", label, strings.Join(values, ", "))
 }
