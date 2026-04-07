@@ -8,8 +8,8 @@ import (
 )
 
 func TestRegisterDocumentsAllowedTypeValues(t *testing.T) {
-	validTaskTypes := []string{"feature", "bug"}
-	validRelationTypes := []string{"blocked_by", "relates_to", "duplicate_of"}
+	validTaskTypes := []string{"bug", "chore"}
+	validRelationTypes := []string{"blocks", "duplicates"}
 
 	s := server.NewMCPServer("test-server", "1.0.0")
 	Register(s, nil, validTaskTypes, validRelationTypes)
@@ -17,23 +17,23 @@ func TestRegisterDocumentsAllowedTypeValues(t *testing.T) {
 	tools := s.ListTools()
 
 	assertStringProperty(t, tools["create_task"].Tool.InputSchema.Properties, "type",
-		"Allowed values: feature, bug.",
+		"Allowed values: bug, chore.",
 		validTaskTypes,
 	)
 	assertStringProperty(t, tools["update_task"].Tool.InputSchema.Properties, "type",
-		"Allowed values: feature, bug.",
+		"Allowed values: bug, chore.",
 		validTaskTypes,
 	)
 	assertStringProperty(t, tools["list_tasks"].Tool.InputSchema.Properties, "type",
-		"Allowed values: feature, bug.",
+		"Allowed values: bug, chore.",
 		validTaskTypes,
 	)
 	assertStringProperty(t, tools["add_relation"].Tool.InputSchema.Properties, "type",
-		"Allowed values: blocked_by, relates_to, duplicate_of.",
+		"Allowed values: blocks, duplicates.",
 		validRelationTypes,
 	)
 	assertStringProperty(t, tools["remove_relation"].Tool.InputSchema.Properties, "type",
-		"Allowed values: blocked_by, relates_to, duplicate_of.",
+		"Allowed values: blocks, duplicates.",
 		validRelationTypes,
 	)
 }
