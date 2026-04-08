@@ -286,6 +286,24 @@ func TestIndex_NextID(t *testing.T) {
 	}
 }
 
+func TestIndex_NextTodoBreaksTiesByLowerID(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+	idx.Set(&task.Task{ID: 5, Title: "Later ID", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now, UpdatedAt: now})
+	idx.Set(&task.Task{ID: 3, Title: "Earlier ID", Status: task.StatusTodo, Priority: task.PriorityHigh, Type: "feature", CreatedAt: now, UpdatedAt: now})
+
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 3 {
+		t.Errorf("NextTodo() ID = %d, want 3 (lower ID wins when priority and CreatedAt match)", next.ID)
+	}
+}
+
 func TestIndex_SaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewMarkdownStorage(dir)

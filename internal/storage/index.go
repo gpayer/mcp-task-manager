@@ -381,7 +381,10 @@ func (idx *Index) NextTodo() *task.Task {
 			if tasks[i].Priority.Order() != tasks[j].Priority.Order() {
 				return tasks[i].Priority.Order() < tasks[j].Priority.Order()
 			}
-			return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
+			if !tasks[i].CreatedAt.Equal(tasks[j].CreatedAt) {
+				return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
+			}
+			return tasks[i].ID < tasks[j].ID
 		})
 	}
 

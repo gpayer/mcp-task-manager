@@ -1,19 +1,21 @@
 ---
 name: superpowers-workflow
-description: Execute task manager tasks using repo-local planner, coder, and reviewer agents with explicit fallback approval
+description: Execute task manager tasks using installed planner, coder, and reviewer agents with explicit fallback approval
 ---
 
 # Superpowers Workflow
 
 ## Overview
 
-Execute tasks from the task manager MCP using repo-local role agents.
+Execute tasks from the task manager MCP using installed `mcp-task-manager` role agents.
+
+These agents are typically discovered through the Codex install layout described in `.codex/INSTALL.md`, usually at `~/.agents/agents/mcp-task-manager/`. Do not assume the active workspace itself provides the live agent definitions.
 
 - Parent tasks without subtasks dispatch `planner`.
 - Executable subtasks dispatch `coder`.
-- Review stages dispatch `reviewer`.
+- Dispatch `reviewer` only when the task explicitly calls for review work or the user asks for an independent review.
 
-This skill is the workflow controller. It owns task selection, task state changes, fallback decisions, and phase transitions. The role agents only do their assigned phase work.
+This skill is the workflow controller. It owns task selection, task state changes, fallback decisions, phase transitions, and communication between role agents and the user when needed. It should orchestrate only, not add extra review passes or other busy work beyond what the task requires.
 
 **Announce at start:** "Using superpowers-workflow to execute pending tasks."
 
@@ -25,13 +27,13 @@ This skill is the workflow controller. It owns task selection, task state change
 
 For each role, resolve agents in this order:
 
-1. Repo-local role agent from this repository
+1. Installed `mcp-task-manager` role agent discovered by Codex, typically via `~/.agents/agents/mcp-task-manager/`
 2. Another available role-appropriate agent
 3. Default agent
 
 Never silently downgrade.
 
-If the preferred repo-local agent cannot be used, stop and ask the user which fallback to allow before continuing. Make the downgrade explicit so the user understands the workflow is leaving the repository-specific guardrails.
+If the preferred installed task-manager agent cannot be used, stop and ask the user which fallback to allow before continuing. Make the downgrade explicit so the user understands the workflow is leaving the intended task-manager guardrails.
 
 Apply this rule independently for:
 
@@ -62,7 +64,7 @@ digraph workflow {
     "Has subtasks?" [shape=diamond];
     "start_task" [shape=box];
     "PLANNING PHASE (planner)" [shape=box style=filled fillcolor=lightyellow];
-    "EXECUTION PHASE (coder + reviewer)" [shape=box style=filled fillcolor=lightgreen];
+    "EXECUTION PHASE (role dispatch)" [shape=box style=filled fillcolor=lightgreen];
 
     "get_next_task" -> "No tasks?";
     "No tasks?" -> "Done - announce completion" [label="yes"];
@@ -72,9 +74,9 @@ digraph workflow {
     "Has subtasks?" -> "start_task" [label="yes - skip to execution"];
     "Has subtasks?" -> "start_task" [label="no - needs planning"];
     "start_task" -> "PLANNING PHASE (planner)" [label="parent without subtasks"];
-    "start_task" -> "EXECUTION PHASE (coder + reviewer)" [label="subtask or parent with subtasks"];
-    "PLANNING PHASE (planner)" -> "EXECUTION PHASE (coder + reviewer)";
-    "EXECUTION PHASE (coder + reviewer)" -> "get_next_task" [label="subtask complete"];
+    "start_task" -> "EXECUTION PHASE (role dispatch)" [label="subtask or parent with subtasks"];
+    "PLANNING PHASE (planner)" -> "EXECUTION PHASE (role dispatch)";
+    "EXECUTION PHASE (role dispatch)" -> "get_next_task" [label="subtask complete"];
 }
 ```
 
@@ -100,7 +102,7 @@ Call `mcp__task-manager__start_task` with the parent task ID before dispatch.
 
 #### Step 2: Resolve Planning Agent
 
-Prefer the repo-local `planner` agent.
+Prefer the installed `mcp-task-manager` `planner` agent.
 
 If it cannot be used:
 - do not continue automatically
@@ -152,7 +154,7 @@ After `planner` returns:
 
 ### Phase 3: Execution
 
-For each executable subtask, use the resolved `coder` and `reviewer` agents in sequence.
+For each executable subtask, dispatch the role agent the task actually requires. Most implementation subtasks go to `coder`. Use `reviewer` only when the task explicitly asks for review work or the user requests an independent review.
 
 #### Step 1: Start Subtask
 
@@ -161,7 +163,7 @@ For each executable subtask, use the resolved `coder` and `reviewer` agents in s
 
 #### Step 2: Resolve `coder`
 
-Prefer the repo-local `coder` agent.
+Prefer the installed `mcp-task-manager` `coder` agent.
 
 If it cannot be used:
 - stop before dispatch
@@ -188,21 +190,25 @@ Instructions:
 ```
 
 If `coder` reports:
-- `DONE`: proceed to review
-- `DONE_WITH_CONCERNS`: read the concerns, address any scope or correctness questions, then proceed to review if safe
+- `DONE`: complete the subtask unless an explicit review pass is required
+- `DONE_WITH_CONCERNS`: read the concerns, address any scope or correctness questions, then complete the subtask unless an explicit review pass is required
 - `NEEDS_CONTEXT`: provide the missing context and re-dispatch
 - `BLOCKED`: stop and escalate with the blocker
 
-#### Step 4: Resolve `reviewer`
+If no review pass is required, skip to Step 6.
 
-Prefer the repo-local `reviewer` agent.
+#### Step 4: Optional `reviewer` dispatch
+
+Dispatch `reviewer` only when the task explicitly requires review work or the user requests an independent review. The controller should not add automatic review loops to every coding task.
 
 If it cannot be used:
 - stop before dispatch
 - ask the user which fallback to allow
 - continue only after the user confirms
 
-#### Step 5: Dispatch `reviewer` for spec compliance
+Prefer the installed `mcp-task-manager` `reviewer` agent when a review dispatch is required.
+
+#### Step 5: Dispatch `reviewer`
 
 Launch the review agent with:
 
@@ -213,8 +219,7 @@ Original spec:
 {subtask description}
 
 Review mode:
-- spec compliance first
-- verify the implementation matches the requested work
+- follow the review scope requested by the task or user
 - identify anything missing or extra
 - return concrete findings with severity and file references
 ```
@@ -222,29 +227,10 @@ Review mode:
 If issues are found:
 1. Send the findings back to `coder`.
 2. Have `coder` fix the issues.
-3. Re-run spec review.
+3. Re-run the requested review.
 4. Repeat up to 3 iterations, then escalate to the user.
 
-#### Step 6: Dispatch `reviewer` for code quality
-
-Only after spec compliance passes, launch the review agent again with:
-
-```text
-Code quality review for Task #{id}: {title}
-
-Review mode:
-- code quality second
-- check maintainability, correctness, testing, and fit with repository patterns
-- return concrete findings with severity and file references
-```
-
-If important issues are found:
-1. Send the findings back to `coder`.
-2. Have `coder` fix the issues.
-3. Re-run code quality review.
-4. Repeat up to 3 iterations, then escalate to the user.
-
-#### Step 7: Complete Subtask
+#### Step 6: Complete Subtask
 
 1. Call `mcp__task-manager__complete_task` with the subtask ID.
 2. Parent task auto-completes when its last subtask is done.
@@ -275,7 +261,7 @@ If important issues are found:
 
 1. Do not complete the subtask while review findings remain open.
 2. Send findings back to `coder`.
-3. Re-run the failed review stage after fixes.
+3. Re-run the requested review after fixes.
 
 ### Workflow Interruption
 
@@ -311,12 +297,6 @@ Dispatching `coder` for Task #8...
 [Coder completes]
 Coder: DONE
 
-Dispatching `reviewer` for spec compliance...
-Reviewer: APPROVED
-
-Dispatching `reviewer` for code quality...
-Reviewer: APPROVED
-
 [Calls complete_task(8)]
 Task #8 completed.
 ```
@@ -327,6 +307,7 @@ Task #8 completed.
 - Always complete tasks after finishing.
 - The workflow controller owns task state changes and phase transitions.
 - `planner`, `coder`, and `reviewer` only do their assigned phase work.
+- Prefer the installed `mcp-task-manager` agents discovered by Codex; do not assume the workspace copy is the active agent location.
 - Never silently fall back to another agent.
 - Provide full context to role agents because they do not share your session history.
 - Stop on failure and escalate clearly.
