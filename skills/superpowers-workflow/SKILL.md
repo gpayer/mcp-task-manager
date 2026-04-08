@@ -39,6 +39,16 @@ Apply this rule independently for:
 - implementation fallback for `coder`
 - review fallback for `reviewer`
 
+## Model Selection Policy
+
+Use role-level model guidance rather than hardcoded vendor-specific mappings.
+
+- `planner`: prefer the most capable available reasoning model, usually with high reasoning effort
+- `reviewer`: prefer the most capable available reasoning model, usually with high reasoning effort
+- `coder`: prefer a quicker model for bounded mechanical work, but escalate to a stronger model for multi-file integration, ambiguous changes, or debugging-heavy tasks
+
+If `coder` becomes blocked because the current model is too weak for the task, re-dispatch with a stronger model before escalating to the user, unless the blocker is missing context rather than model capability.
+
 ## The Process
 
 ```dot

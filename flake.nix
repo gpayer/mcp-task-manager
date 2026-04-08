@@ -22,6 +22,7 @@
             pkgs.go
             pkgs.gopls
             pkgs.gh
+            pkgs.bubblewrap
           ];
 
           shellHook = ''
