@@ -148,7 +148,7 @@ claude mcp add --transport stdio task-manager -- mcp-task-manager
 
 **Usage:**
 
-Use the `/mcp-task-manager:superpowers-workflow` skill to automatically execute pending tasks with planning, implementation, and code review phases.
+Use the `/mcp-task-manager:superpowers-workflow` skill to automatically execute pending tasks with the repo-local `planner`, `coder`, and `reviewer` agents. If one of those agents cannot be used, the workflow stops and asks before allowing a fallback.
 
 ### Codex Integration
 
@@ -158,7 +158,7 @@ Use the `/mcp-task-manager:superpowers-workflow` skill to automatically execute 
 codex mcp add task-manager -- mcp-task-manager
 ```
 
-**Paste into Codex to install the skill and command:**
+**Paste into Codex to install the skills and agents:**
 
 ```text
 Fetch https://raw.githubusercontent.com/gpayer/mcp-task-manager/main/.codex/INSTALL.md and execute the installation steps exactly.
@@ -166,7 +166,7 @@ Fetch https://raw.githubusercontent.com/gpayer/mcp-task-manager/main/.codex/INST
 
 **Usage:**
 
-Use the `$superpowers-workflow` skill to automatically execute pending tasks with planning, implementation, and code review phases.
+Use the `$superpowers-workflow` skill to automatically execute pending tasks with the repo-local `planner`, `coder`, and `reviewer` agents. If one of those agents cannot be used, the workflow stops and asks before allowing a fallback.
 
 ## MCP Tools
 
