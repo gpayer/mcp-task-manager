@@ -7,9 +7,9 @@ description: Execute task manager tasks using installed planner, coder, and revi
 
 ## Overview
 
-Execute tasks from the task manager MCP using installed `mcp-task-manager` role agents.
+Execute tasks from the task manager MCP using Codex custom role agents.
 
-These agents are typically discovered through the Codex install layout described in `.codex/INSTALL.md`, usually at `~/.agents/agents/mcp-task-manager/`. Do not assume the active workspace itself provides the live agent definitions.
+These agents should be defined as standalone TOML files in Codex's documented custom-agent locations: project-scoped `.codex/agents/` or personal `~/.codex/agents/`. Do not assume free-form Markdown files under `agents/` are discoverable by Codex.
 
 - Parent tasks without subtasks dispatch `planner`.
 - Executable subtasks dispatch `coder`.
@@ -27,13 +27,13 @@ This skill is the workflow controller. It owns task selection, task state change
 
 For each role, resolve agents in this order:
 
-1. Installed `mcp-task-manager` role agent discovered by Codex, typically via `~/.agents/agents/mcp-task-manager/`
+1. The matching custom role agent discovered by Codex from `.codex/agents/` or `~/.codex/agents/`
 2. Another available role-appropriate agent
 3. Default agent
 
 Never silently downgrade.
 
-If the preferred installed task-manager agent cannot be used, stop and ask the user which fallback to allow before continuing. Make the downgrade explicit so the user understands the workflow is leaving the intended task-manager guardrails.
+If the preferred Codex custom agent cannot be used, stop and ask the user which fallback to allow before continuing. Make the downgrade explicit so the user understands the workflow is leaving the intended task-manager guardrails.
 
 Apply this rule independently for:
 
@@ -102,7 +102,7 @@ Call `mcp__task-manager__start_task` with the parent task ID before dispatch.
 
 #### Step 2: Resolve Planning Agent
 
-Prefer the installed `mcp-task-manager` `planner` agent.
+Prefer the `planner` custom agent from Codex's configured agent directories.
 
 If it cannot be used:
 - do not continue automatically
@@ -163,7 +163,7 @@ For each executable subtask, dispatch the role agent the task actually requires.
 
 #### Step 2: Resolve `coder`
 
-Prefer the installed `mcp-task-manager` `coder` agent.
+Prefer the `coder` custom agent from Codex's configured agent directories.
 
 If it cannot be used:
 - stop before dispatch
@@ -206,7 +206,7 @@ If it cannot be used:
 - ask the user which fallback to allow
 - continue only after the user confirms
 
-Prefer the installed `mcp-task-manager` `reviewer` agent when a review dispatch is required.
+Prefer the `reviewer` custom agent from Codex's configured agent directories when a review dispatch is required.
 
 #### Step 5: Dispatch `reviewer`
 

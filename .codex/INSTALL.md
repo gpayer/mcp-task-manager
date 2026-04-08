@@ -1,6 +1,6 @@
 # Installing MCP Task Manager Plugin for Codex
 
-Install the skills and agents from this repository so Codex can discover and use them. The install is just a clone plus symlinks (or Windows junctions).
+Install the skills and custom agents from this repository so Codex can discover and use them. The install is a clone plus symlinks (or Windows junctions).
 
 ## Prerequisites
 - Git
@@ -23,26 +23,34 @@ Install the skills and agents from this repository so Codex can discover and use
    cmd /c mklink /J "$env:USERPROFILE\.agents\skills\mcp-task-manager" "$env:USERPROFILE\.codex\mcp-task-manager\skills"
    ```
 
-3. **Link the repo-local agents for Codex discovery:**
+3. **Link the custom agent files into Codex's documented agent directory:**
    ```bash
-   mkdir -p ~/.agents/agents
-   ln -s ~/.codex/mcp-task-manager/agents ~/.agents/agents/mcp-task-manager
+   mkdir -p ~/.codex/agents
+   ln -s ~/.codex/mcp-task-manager/.codex/agents/planner.toml ~/.codex/agents/planner.toml
+   ln -s ~/.codex/mcp-task-manager/.codex/agents/coder.toml ~/.codex/agents/coder.toml
+   ln -s ~/.codex/mcp-task-manager/.codex/agents/reviewer.toml ~/.codex/agents/reviewer.toml
    ```
 
    **Windows (PowerShell):**
    ```powershell
-   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.agents\agents"
-   cmd /c mklink /J "$env:USERPROFILE\.agents\agents\mcp-task-manager" "$env:USERPROFILE\.codex\mcp-task-manager\agents"
+   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.codex\agents"
+   New-Item -ItemType SymbolicLink -Path "$env:USERPROFILE\.codex\agents\planner.toml" -Target "$env:USERPROFILE\.codex\mcp-task-manager\.codex\agents\planner.toml"
+   New-Item -ItemType SymbolicLink -Path "$env:USERPROFILE\.codex\agents\coder.toml" -Target "$env:USERPROFILE\.codex\mcp-task-manager\.codex\agents\coder.toml"
+   New-Item -ItemType SymbolicLink -Path "$env:USERPROFILE\.codex\agents\reviewer.toml" -Target "$env:USERPROFILE\.codex\mcp-task-manager\.codex\agents\reviewer.toml"
    ```
+
+   Codex's subagent docs expect standalone TOML files under `~/.codex/agents/` for personal agents or `.codex/agents/` for project-scoped agents.
 
 4. **Restart Codex** to pick up the new skills and agents.
 
 ## Verify
 ```bash
 ls -la ~/.agents/skills/mcp-task-manager
-ls -la ~/.agents/agents/mcp-task-manager
+ls -la ~/.codex/agents/planner.toml
+ls -la ~/.codex/agents/coder.toml
+ls -la ~/.codex/agents/reviewer.toml
 ```
-You should see symlinks (or junctions on Windows) pointing into `~/.codex/mcp-task-manager`.
+You should see symlinks (or links on Windows) pointing into `~/.codex/mcp-task-manager/.codex/agents/`.
 
 ## Updating
 ```bash
@@ -53,7 +61,9 @@ Updates are immediate through the symlinks.
 ## Uninstalling
 ```bash
 rm ~/.agents/skills/mcp-task-manager
-rm ~/.agents/agents/mcp-task-manager
+rm ~/.codex/agents/planner.toml
+rm ~/.codex/agents/coder.toml
+rm ~/.codex/agents/reviewer.toml
 ```
 Optionally delete the clone:
 ```bash
