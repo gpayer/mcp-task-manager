@@ -85,7 +85,8 @@ digraph workflow {
 
 1. Call `mcp__task-manager__get_next_task`
 2. If no tasks available:
-   - Commit task file changes: `git add tasks/ && git commit -m "chore: update task states"`
+   - Verify the worktree is clean
+   - If only task-state changes remain, commit them with `git add tasks/ && git commit -m "chore: update task states"`
    - Announce "All tasks completed." and stop
 3. If result is a subtask: go to Phase 3 (Execution)
 4. If result is a parent task:
@@ -189,7 +190,9 @@ Instructions:
 - Use relevant execution skills such as `test-driven-development`, `systematic-debugging`, and `verification-before-completion` when applicable.
 - Follow the task steps exactly as written.
 - Report one of: `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT`, `BLOCKED`.
+- Include the commit message from the subtask spec, or propose a precise replacement if the implementation changed scope.
 - Do not complete the task-manager task; the workflow controller handles task state.
+- Do not create git commits; the workflow controller commits after the subtask is complete.
 ```
 
 After dispatching `coder`, immediately call `wait_agent` for that coder and do not take any other workflow step until it finishes.
@@ -241,7 +244,10 @@ If issues are found:
 
 1. Call `mcp__task-manager__complete_task` with the subtask ID.
 2. Parent task auto-completes when its last subtask is done.
-3. Return to Phase 1.
+3. Review `git status` and stage all files changed for this completed subtask, including `tasks/`; do not stage unrelated pre-existing or user changes.
+4. Commit immediately using the commit message reported by `coder`.
+5. If there are no staged changes, do not create an empty commit; escalate because a completed subtask should normally leave task-state changes at minimum.
+6. Return to Phase 1.
 
 ## Error Handling
 
@@ -314,12 +320,18 @@ Reviewer: No findings.
 
 [Calls complete_task(8)]
 Task #8 completed.
+
+[Calls git status]
+[Calls git add <changed files> tasks/]
+[Calls git commit -m "feat: add authentication scaffolding"]
+Committed Task #8.
 ```
 
 ## Remember
 
 - Always start tasks before working on them.
 - Always complete tasks after finishing.
+- Commit immediately after every successfully completed subtask.
 - The workflow controller owns task state changes and phase transitions.
 - `planner`, `coder`, and `reviewer` only do their assigned phase work.
 - Prefer the installed `mcp-task-manager` agents discovered by Codex; do not assume the workspace copy is the active agent location.
@@ -327,4 +339,4 @@ Task #8 completed.
 - Provide full context to role agents because they do not share your session history.
 - After every `spawn_agent`, call `wait_agent` and block until that exact subagent finishes.
 - Stop on failure and escalate clearly.
-- Commit task files at workflow end with `git add tasks/ && git commit -m "chore: update task states"`.
+- At workflow end, verify the worktree is clean. If only task-state changes remain, commit them with `git add tasks/ && git commit -m "chore: update task states"`.
