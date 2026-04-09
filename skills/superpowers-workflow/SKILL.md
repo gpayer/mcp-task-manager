@@ -13,9 +13,10 @@ These agents should be defined as standalone TOML files in Codex's documented cu
 
 - Parent tasks without subtasks dispatch `planner`.
 - Executable subtasks dispatch `coder`.
-- Dispatch `reviewer` only when the task explicitly calls for review work or the user asks for an independent review.
+- Every coding task dispatches `reviewer` after `coder` finishes.
+- Pure documentation or other low-complexity non-coding tasks dispatch `reviewer` only when the task explicitly calls for review work or the user asks for an independent review.
 
-This skill is the workflow controller. It owns task selection, task state changes, fallback decisions, phase transitions, and communication between role agents and the user when needed. It should orchestrate only, not add extra review passes or other busy work beyond what the task requires.
+This skill is the workflow controller. It owns task selection, task state changes, fallback decisions, phase transitions, and communication between role agents and the user when needed. It must execute the workflow sequentially: after each `spawn_agent` call, wait for that subagent to finish before doing any other workflow step. Do not rely on `subagent_notification` to resume the workflow.
 
 **Announce at start:** "Using superpowers-workflow to execute pending tasks."
 
@@ -27,7 +28,7 @@ This skill is the workflow controller. It owns task selection, task state change
 
 For each role, resolve agents in this order:
 
-1. The matching custom role agent discovered by Codex from `.codex/agents/` or `~/.codex/agents/`
+1. The matching role-specific Codex agent, using the built-in role when available or the configured custom agent from `.codex/agents/` or `~/.codex/agents/`
 2. Another available role-appropriate agent
 3. Default agent
 
@@ -147,6 +148,8 @@ Report the subtasks you created.
 
 #### Step 4: Verify and Proceed
 
+After dispatching `planner`, immediately call `wait_agent` for that planner and do not take any other workflow step until it finishes.
+
 After `planner` returns:
 1. If it reports `NEEDS_CONTEXT`, get clarification before proceeding.
 2. Verify subtasks were created.
@@ -154,7 +157,7 @@ After `planner` returns:
 
 ### Phase 3: Execution
 
-For each executable subtask, dispatch the role agent the task actually requires. Most implementation subtasks go to `coder`. Use `reviewer` only when the task explicitly asks for review work or the user requests an independent review.
+For each executable subtask, dispatch the role agent the task actually requires. Most implementation subtasks go to `coder`. Every coding task must then be reviewed by `reviewer`. Pure documentation or other low-complexity non-coding tasks use `reviewer` only when the task explicitly asks for review work or the user requests an independent review.
 
 #### Step 1: Start Subtask
 
@@ -189,17 +192,19 @@ Instructions:
 - Do not complete the task-manager task; the workflow controller handles task state.
 ```
 
+After dispatching `coder`, immediately call `wait_agent` for that coder and do not take any other workflow step until it finishes.
+
 If `coder` reports:
-- `DONE`: complete the subtask unless an explicit review pass is required
-- `DONE_WITH_CONCERNS`: read the concerns, address any scope or correctness questions, then complete the subtask unless an explicit review pass is required
+- `DONE`: continue to review if required for the task type
+- `DONE_WITH_CONCERNS`: read the concerns, address any scope or correctness questions, then continue to review if required for the task type
 - `NEEDS_CONTEXT`: provide the missing context and re-dispatch
 - `BLOCKED`: stop and escalate with the blocker
 
 If no review pass is required, skip to Step 6.
 
-#### Step 4: Optional `reviewer` dispatch
+#### Step 4: `reviewer` dispatch
 
-Dispatch `reviewer` only when the task explicitly requires review work or the user requests an independent review. The controller should not add automatic review loops to every coding task.
+Dispatch `reviewer` after every coding task. For pure documentation or other low-complexity non-coding tasks, dispatch `reviewer` only when the task requires review work or the user requests an independent review.
 
 If it cannot be used:
 - stop before dispatch
@@ -223,6 +228,8 @@ Review mode:
 - identify anything missing or extra
 - return concrete findings with severity and file references
 ```
+
+After dispatching `reviewer`, immediately call `wait_agent` for that reviewer and do not take any other workflow step until it finishes.
 
 If issues are found:
 1. Send the findings back to `coder`.
@@ -294,8 +301,16 @@ Planning complete. Starting execution.
 
 Dispatching `coder` for Task #8...
 
+[Calls wait_agent for coder]
 [Coder completes]
 Coder: DONE
+
+[Coding task requires review]
+Dispatching `reviewer` for Task #8...
+
+[Calls wait_agent for reviewer]
+[Reviewer completes]
+Reviewer: No findings.
 
 [Calls complete_task(8)]
 Task #8 completed.
@@ -310,5 +325,6 @@ Task #8 completed.
 - Prefer the installed `mcp-task-manager` agents discovered by Codex; do not assume the workspace copy is the active agent location.
 - Never silently fall back to another agent.
 - Provide full context to role agents because they do not share your session history.
+- After every `spawn_agent`, call `wait_agent` and block until that exact subagent finishes.
 - Stop on failure and escalate clearly.
 - Commit task files at workflow end with `git add tasks/ && git commit -m "chore: update task states"`.

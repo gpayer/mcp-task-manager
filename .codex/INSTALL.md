@@ -41,7 +41,45 @@ Install the skills and custom agents from this repository so Codex can discover 
 
    Codex's subagent docs expect standalone TOML files under `~/.codex/agents/` for personal agents or `.codex/agents/` for project-scoped agents.
 
-4. **Restart Codex** to pick up the new skills and agents.
+4. **Register the new agents in Codex's config**
+
+    Add this snippet to `~/.codex/config.toml`:
+
+    ```TOML
+    [agents.planner]
+    description = "Planning-only agent that decomposes approved work into executable subtasks without implementing code."
+    config_file = "/home/<you>/.codex/agents/planner.toml"
+
+    [agents.coder]
+    description = "Implementation-only agent that executes one assigned task inside scope and reports status clearly."
+    config_file = "/home/<you>/.codex/agents/coder.toml"
+
+    [agents.reviewer]
+    description = "Review-only agent that validates assigned work for spec compliance and code quality."
+    config_file = "/home/<you>/.codex/agents/reviewer.toml"
+    ```
+
+    Replace `/home/<you>` with your actual home directory path.
+
+    **Windows config snippet:**
+
+    ```TOML
+    [agents.planner]
+    description = "Planning-only agent that decomposes approved work into executable subtasks without implementing code."
+    config_file = "C:\\Users\\<you>\\.codex\\agents\\planner.toml"
+
+    [agents.coder]
+    description = "Implementation-only agent that executes one assigned task inside scope and reports status clearly."
+    config_file = "C:\\Users\\<you>\\.codex\\agents\\coder.toml"
+
+    [agents.reviewer]
+    description = "Review-only agent that validates assigned work for spec compliance and code quality."
+    config_file = "C:\\Users\\<you>\\.codex\\agents\\reviewer.toml"
+    ```
+
+    The symlinks in Step 3 provide stable files for Codex to read, and this config registration is still required for personal agents to be found.
+
+5. **Restart Codex** to pick up the new skills and agents.
 
 ## Verify
 ```bash
