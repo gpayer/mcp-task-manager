@@ -304,6 +304,207 @@ func TestIndex_NextTodoBreaksTiesByLowerID(t *testing.T) {
 	}
 }
 
+func TestIndex_NextTodo_UsesParentOrderingForTodoParentSubtasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	base := time.Date(2025, time.January, 1, 9, 0, 0, 0, time.UTC)
+	parentID := 1
+	tasks := []*task.Task{
+		{
+			ID:        1,
+			Title:     "Older Parent",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityHigh,
+			Type:      "feature",
+			CreatedAt: base,
+			UpdatedAt: base,
+		},
+		{
+			ID:        2,
+			ParentID:  &parentID,
+			Title:     "Child Of Older Parent",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityHigh,
+			Type:      "feature",
+			CreatedAt: base.Add(4 * time.Hour),
+			UpdatedAt: base.Add(4 * time.Hour),
+		},
+		{
+			ID:        3,
+			Title:     "Newer Standalone",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityHigh,
+			Type:      "feature",
+			CreatedAt: base.Add(2 * time.Hour),
+			UpdatedAt: base.Add(2 * time.Hour),
+		},
+	}
+
+	for _, tk := range tasks {
+		if err := storage.Save(tk); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 2 {
+		t.Errorf("NextTodo() ID = %d, want 2 (child of older equal-priority parent)", next.ID)
+	}
+}
+
+func TestIndex_NextTodo_UsesParentOrderingBeforeChildPriority(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	base := time.Date(2025, time.January, 2, 9, 0, 0, 0, time.UTC)
+	parentID := 1
+	tasks := []*task.Task{
+		{
+			ID:        1,
+			Title:     "Critical Parent",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityCritical,
+			Type:      "feature",
+			CreatedAt: base,
+			UpdatedAt: base,
+		},
+		{
+			ID:        2,
+			ParentID:  &parentID,
+			Title:     "Low Priority Child",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityLow,
+			Type:      "feature",
+			CreatedAt: base.Add(6 * time.Hour),
+			UpdatedAt: base.Add(6 * time.Hour),
+		},
+		{
+			ID:        3,
+			Title:     "High Priority Standalone",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityHigh,
+			Type:      "feature",
+			CreatedAt: base.Add(3 * time.Hour),
+			UpdatedAt: base.Add(3 * time.Hour),
+		},
+	}
+
+	for _, tk := range tasks {
+		if err := storage.Save(tk); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 2 {
+		t.Errorf("NextTodo() ID = %d, want 2 (child of higher-priority parent wins before child priority)", next.ID)
+	}
+}
+
+func TestIndex_NextTodo_SortsWinningParentChildrenAfterParentSelection(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	base := time.Date(2025, time.January, 3, 9, 0, 0, 0, time.UTC)
+	parentID := 1
+	tasks := []*task.Task{
+		{
+			ID:        1,
+			Title:     "Winning Parent",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityCritical,
+			Type:      "feature",
+			CreatedAt: base,
+			UpdatedAt: base,
+		},
+		{
+			ID:        2,
+			ParentID:  &parentID,
+			Title:     "Medium Child",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityMedium,
+			Type:      "feature",
+			CreatedAt: base.Add(1 * time.Hour),
+			UpdatedAt: base.Add(1 * time.Hour),
+		},
+		{
+			ID:        6,
+			ParentID:  &parentID,
+			Title:     "High Child Later",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityHigh,
+			Type:      "feature",
+			CreatedAt: base.Add(4 * time.Hour),
+			UpdatedAt: base.Add(4 * time.Hour),
+		},
+		{
+			ID:        5,
+			ParentID:  &parentID,
+			Title:     "High Child Same Time Higher ID",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityHigh,
+			Type:      "feature",
+			CreatedAt: base.Add(2 * time.Hour),
+			UpdatedAt: base.Add(2 * time.Hour),
+		},
+		{
+			ID:        4,
+			ParentID:  &parentID,
+			Title:     "High Child Same Time Lower ID",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityHigh,
+			Type:      "feature",
+			CreatedAt: base.Add(2 * time.Hour),
+			UpdatedAt: base.Add(2 * time.Hour),
+		},
+		{
+			ID:        7,
+			Title:     "Competing Standalone",
+			Status:    task.StatusTodo,
+			Priority:  task.PriorityCritical,
+			Type:      "feature",
+			CreatedAt: base.Add(8 * time.Hour),
+			UpdatedAt: base.Add(8 * time.Hour),
+		},
+	}
+
+	for _, tk := range tasks {
+		if err := storage.Save(tk); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 4 {
+		t.Errorf("NextTodo() ID = %d, want 4 (winning parent's children sorted by priority, CreatedAt, then ID)", next.ID)
+	}
+}
+
 func TestIndex_SaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewMarkdownStorage(dir)
