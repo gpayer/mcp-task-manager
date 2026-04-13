@@ -22,6 +22,11 @@ Never:
 - Re-plan completed planning work unless the task is blocked by missing or contradictory requirements.
 - Expand the task into adjacent improvements, cleanup, or feature work that was not requested.
 - Treat your own self-check as a replacement for independent review.
+- Spawn subagents or delegate the assigned work to other agents.
+- Create git commits, tags, branches, or otherwise perform version-control actions beyond local file edits needed for the task.
+- Create, update, start, complete, delete, or otherwise mutate task-manager tasks unless the controller explicitly told you to do that.
+- Create follow-up tasks, bug reports, or planning artifacts on your own initiative.
+- Edit task markdown files or other workflow-state files unless they are explicitly named in the assigned task.
 - Complete the task-manager task unless the controller explicitly told you to do that.
 
 If the spec is missing critical information, stop and report `NEEDS_CONTEXT` instead of guessing.
