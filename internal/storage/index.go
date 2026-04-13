@@ -418,15 +418,25 @@ func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType 
 	return result
 }
 
-// NextTodo returns the highest priority todo task
-// Priority order:
-// 1. Subtasks of in_progress parents (sorted by priority, then creation date)
-// 2. Top-level todo tasks and subtasks of todo parents (sorted by priority, then creation date)
-// Parents with subtasks are skipped - the real work is in the subtasks
+type nextTodoGroupKey struct {
+	priorityOrder    int
+	createdAt        time.Time
+	id               int
+	inProgressParent bool
+}
+
+type nextTodoGroup struct {
+	key   nextTodoGroupKey
+	tasks []*task.Task
+}
+
+// NextTodo returns the highest priority actionable todo task.
+// Parent tasks with subtasks are skipped. Subtasks inherit their parent's
+// priority, creation date, and ID for group selection, then compete within the
+// winning group by their own priority, creation date, and ID.
 func (idx *Index) NextTodo() *task.Task {
 	idx.syncIfStale()
-	var inProgressSubtasks []*task.Task
-	var otherCandidates []*task.Task
+	groups := make(map[int]*nextTodoGroup)
 
 	for _, e := range idx.entries {
 		if e.Status != task.StatusTodo {
@@ -441,42 +451,70 @@ func (idx *Index) NextTodo() *task.Task {
 			continue
 		}
 
-		// Check if this is a subtask of an in_progress parent
+		candidate := entryToTask(e)
+		groupID := e.ID
+		key := nextTodoGroupKey{
+			priorityOrder: e.Priority.Order(),
+			createdAt:     e.CreatedAt,
+			id:            e.ID,
+		}
+
 		if e.ParentID != nil {
-			if parent, ok := idx.GetEntry(*e.ParentID); ok && parent.Status == task.StatusInProgress {
-				inProgressSubtasks = append(inProgressSubtasks, entryToTask(e))
-				continue
+			if parent, ok := idx.GetEntry(*e.ParentID); ok {
+				groupID = parent.ID
+				key = nextTodoGroupKey{
+					priorityOrder:    parent.Priority.Order(),
+					createdAt:        parent.CreatedAt,
+					id:               parent.ID,
+					inProgressParent: parent.Status == task.StatusInProgress,
+				}
 			}
 		}
 
-		otherCandidates = append(otherCandidates, entryToTask(e))
+		group, ok := groups[groupID]
+		if !ok {
+			group = &nextTodoGroup{key: key}
+			groups[groupID] = group
+		}
+		group.tasks = append(group.tasks, candidate)
 	}
 
-	// Sort function: by priority (lower order = higher priority), then by creation date
-	sortByPriorityAndDate := func(tasks []*task.Task) {
-		sort.Slice(tasks, func(i, j int) bool {
-			if tasks[i].Priority.Order() != tasks[j].Priority.Order() {
-				return tasks[i].Priority.Order() < tasks[j].Priority.Order()
-			}
-			if !tasks[i].CreatedAt.Equal(tasks[j].CreatedAt) {
-				return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
-			}
-			return tasks[i].ID < tasks[j].ID
-		})
-	}
-
-	// Prioritize subtasks of in_progress parents
-	if len(inProgressSubtasks) > 0 {
-		sortByPriorityAndDate(inProgressSubtasks)
-		return inProgressSubtasks[0]
-	}
-
-	if len(otherCandidates) == 0 {
+	if len(groups) == 0 {
 		return nil
 	}
 
-	sortByPriorityAndDate(otherCandidates)
-	return otherCandidates[0]
+	groupList := make([]*nextTodoGroup, 0, len(groups))
+	for _, group := range groups {
+		groupList = append(groupList, group)
+	}
+
+	sort.Slice(groupList, func(i, j int) bool {
+		left := groupList[i].key
+		right := groupList[j].key
+		if left.inProgressParent != right.inProgressParent {
+			return left.inProgressParent
+		}
+		if left.priorityOrder != right.priorityOrder {
+			return left.priorityOrder < right.priorityOrder
+		}
+		if !left.createdAt.Equal(right.createdAt) {
+			return left.createdAt.Before(right.createdAt)
+		}
+		return left.id < right.id
+	})
+
+	winningGroup := groupList[0].tasks
+	sort.Slice(winningGroup, func(i, j int) bool {
+		if winningGroup[i].Priority.Order() != winningGroup[j].Priority.Order() {
+			return winningGroup[i].Priority.Order() < winningGroup[j].Priority.Order()
+		}
+		if !winningGroup[i].CreatedAt.Equal(winningGroup[j].CreatedAt) {
+			return winningGroup[i].CreatedAt.Before(winningGroup[j].CreatedAt)
+		}
+		return winningGroup[i].ID < winningGroup[j].ID
+	})
+
+	return winningGroup[0]
 }
 
 // NextID returns the next available task ID
