@@ -1505,6 +1505,73 @@ func TestIndex_Integration_FullFlow(t *testing.T) {
 	}
 }
 
+func TestIndex_AutoRebuildsWhenDiskHasNewTasks(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	parent := &task.Task{
+		ID:          67,
+		Title:       "Parent",
+		Description: "parent description",
+		Status:      task.StatusTodo,
+		Priority:    task.PriorityHigh,
+		Type:        "bug",
+		CreatedAt:   time.Date(2026, 4, 13, 19, 2, 52, 0, time.UTC),
+		UpdatedAt:   time.Date(2026, 4, 13, 19, 2, 52, 0, time.UTC),
+	}
+	if err := storage.Save(parent); err != nil {
+		t.Fatalf("storage.Save(parent) error = %v", err)
+	}
+	idx.Set(parent)
+	if err := idx.Save(); err != nil {
+		t.Fatalf("idx.Save() error = %v", err)
+	}
+
+	subtask := &task.Task{
+		ID:          68,
+		ParentID:    &parent.ID,
+		Title:       "Child",
+		Description: "child description",
+		Status:      task.StatusTodo,
+		Priority:    task.PriorityHigh,
+		Type:        "bug",
+		CreatedAt:   time.Date(2026, 4, 13, 19, 7, 5, 0, time.UTC),
+		UpdatedAt:   time.Date(2026, 4, 13, 19, 7, 5, 0, time.UTC),
+	}
+	if err := storage.Save(subtask); err != nil {
+		t.Fatalf("storage.Save(subtask) error = %v", err)
+	}
+
+	got, ok := idx.Get(subtask.ID)
+	if !ok {
+		t.Fatalf("Get(%d) returned false, want auto-rebuilt task", subtask.ID)
+	}
+	if got.ParentID == nil || *got.ParentID != parent.ID {
+		t.Fatalf("Get(%d) parent_id = %v, want %d", subtask.ID, got.ParentID, parent.ID)
+	}
+
+	filtered := idx.Filter(nil, nil, nil, &parent.ID)
+	if len(filtered) != 1 {
+		t.Fatalf("Filter(parent_id=%d) returned %d tasks, want 1", parent.ID, len(filtered))
+	}
+	if filtered[0].ID != subtask.ID {
+		t.Fatalf("Filter(parent_id=%d) returned task %d, want %d", parent.ID, filtered[0].ID, subtask.ID)
+	}
+
+	if nextID := idx.NextID(); nextID != 69 {
+		t.Fatalf("NextID() = %d, want 69 after auto-rebuild", nextID)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".index.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(.index.json) error = %v", err)
+	}
+	if !strings.Contains(string(data), "\"id\": 68") {
+		t.Fatalf(".index.json should contain rebuilt task 68, got:\n%s", string(data))
+	}
+}
+
 func makeTestTask(id int) *task.Task {
 	now := time.Now().UTC().Truncate(time.Second)
 	return &task.Task{

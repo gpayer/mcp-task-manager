@@ -106,6 +106,7 @@ type Index struct {
 	relationsByTarget map[int][]task.RelationEdge
 	dir               string
 	storage           *MarkdownStorage
+	dirty             bool
 }
 
 // NewIndex creates a new index for the given directory
@@ -128,6 +129,7 @@ func (idx *Index) reset() {
 	idx.entries = make(map[int]*IndexEntry)
 	idx.relationsBySource = make(map[int][]task.RelationEdge)
 	idx.relationsByTarget = make(map[int][]task.RelationEdge)
+	idx.dirty = false
 }
 
 func (idx *Index) rebuildFromTasks(tasks []*task.Task) error {
@@ -159,6 +161,7 @@ func (idx *Index) rebuildFromTasks(tasks []*task.Task) error {
 	}
 
 	if len(tasks) == 0 {
+		idx.dirty = false
 		return nil
 	}
 
@@ -223,7 +226,11 @@ func (idx *Index) Save() error {
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, idx.indexPath())
+	if err := os.Rename(tmpPath, idx.indexPath()); err != nil {
+		return err
+	}
+	idx.dirty = false
+	return nil
 }
 
 // Load reads the index from disk (or rebuilds if missing/corrupt)
@@ -264,17 +271,82 @@ func (idx *Index) Load() error {
 	for _, edge := range indexFile.Relations {
 		idx.addEdge(edge)
 	}
+	idx.dirty = false
 	return nil
+}
+
+func (idx *Index) syncIfStale() {
+	if idx.dirty {
+		return
+	}
+	stale, err := idx.isStaleOnDisk()
+	if err != nil || !stale {
+		return
+	}
+	_ = idx.Rebuild()
+}
+
+func (idx *Index) isStaleOnDisk() (bool, error) {
+	entries, err := os.ReadDir(idx.dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	indexInfo, err := os.Stat(idx.indexPath())
+	indexMissing := os.IsNotExist(err)
+	if err != nil && !indexMissing {
+		return false, err
+	}
+
+	taskCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+
+		taskCount++
+
+		if indexMissing {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return false, err
+		}
+		if info.ModTime().After(indexInfo.ModTime()) {
+			return true, nil
+		}
+	}
+
+	if taskCount == 0 {
+		return false, nil
+	}
+
+	if indexMissing {
+		return len(idx.entries) == 0, nil
+	}
+
+	if taskCount != len(idx.entries) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // GetEntry returns an entry by ID (metadata only, no description)
 func (idx *Index) GetEntry(id int) (*IndexEntry, bool) {
+	idx.syncIfStale()
 	e, ok := idx.entries[id]
 	return e, ok
 }
 
 // Get returns a full task by ID (loads description from disk)
 func (idx *Index) Get(id int) (*task.Task, bool) {
+	idx.syncIfStale()
 	if _, ok := idx.entries[id]; !ok {
 		return nil, false
 	}
@@ -288,15 +360,18 @@ func (idx *Index) Get(id int) (*task.Task, bool) {
 // Set adds or updates a task in the index
 func (idx *Index) Set(t *task.Task) {
 	idx.entries[t.ID] = taskToEntry(t)
+	idx.dirty = true
 }
 
 // Delete removes a task from the index
 func (idx *Index) Delete(id int) {
 	delete(idx.entries, id)
+	idx.dirty = true
 }
 
 // All returns all tasks sorted by ID
 func (idx *Index) All() []*task.Task {
+	idx.syncIfStale()
 	tasks := make([]*task.Task, 0, len(idx.entries))
 	for _, e := range idx.entries {
 		tasks = append(tasks, entryToTask(e))
@@ -310,6 +385,7 @@ func (idx *Index) All() []*task.Task {
 // Filter returns tasks matching the given criteria
 // parentID: nil = all tasks, 0 = top-level only, >0 = subtasks of that parent
 func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType *string, parentID *int) []*task.Task {
+	idx.syncIfStale()
 	var result []*task.Task
 	for _, e := range idx.entries {
 		if status != nil && e.Status != *status {
@@ -348,6 +424,7 @@ func (idx *Index) Filter(status *task.Status, priority *task.Priority, taskType 
 // 2. Top-level todo tasks and subtasks of todo parents (sorted by priority, then creation date)
 // Parents with subtasks are skipped - the real work is in the subtasks
 func (idx *Index) NextTodo() *task.Task {
+	idx.syncIfStale()
 	var inProgressSubtasks []*task.Task
 	var otherCandidates []*task.Task
 
@@ -404,6 +481,7 @@ func (idx *Index) NextTodo() *task.Task {
 
 // NextID returns the next available task ID
 func (idx *Index) NextID() int {
+	idx.syncIfStale()
 	maxID := 0
 	for id := range idx.entries {
 		if id > maxID {
@@ -415,6 +493,7 @@ func (idx *Index) NextID() int {
 
 // GetSubtasks returns all subtasks of a parent task
 func (idx *Index) GetSubtasks(parentID int) []*task.Task {
+	idx.syncIfStale()
 	var result []*task.Task
 	for _, e := range idx.entries {
 		if e.ParentID != nil && *e.ParentID == parentID {
@@ -429,6 +508,7 @@ func (idx *Index) GetSubtasks(parentID int) []*task.Task {
 
 // HasSubtasks returns true if the task has any subtasks
 func (idx *Index) HasSubtasks(taskID int) bool {
+	idx.syncIfStale()
 	for _, e := range idx.entries {
 		if e.ParentID != nil && *e.ParentID == taskID {
 			return true
@@ -439,6 +519,7 @@ func (idx *Index) HasSubtasks(taskID int) bool {
 
 // SubtaskCounts returns (total, done) counts for a parent task
 func (idx *Index) SubtaskCounts(parentID int) (total int, done int) {
+	idx.syncIfStale()
 	for _, e := range idx.entries {
 		if e.ParentID != nil && *e.ParentID == parentID {
 			total++
@@ -452,6 +533,7 @@ func (idx *Index) SubtaskCounts(parentID int) (total int, done int) {
 
 // isBlocked checks if a task has any unresolved blocked_by relations
 func (idx *Index) isBlocked(taskID int) bool {
+	idx.syncIfStale()
 	for _, e := range idx.relationsBySource[taskID] {
 		if e.Type == BlockingRelationType {
 			if target, ok := idx.entries[e.Target]; ok && target.Status != task.StatusDone {
@@ -500,6 +582,7 @@ func (idx *Index) AddRelation(edge task.RelationEdge) {
 		}
 		idx.addEdge(reverse)
 	}
+	idx.dirty = true
 }
 
 // RemoveRelation removes a relation edge from the index
@@ -514,10 +597,12 @@ func (idx *Index) RemoveRelation(edge task.RelationEdge) {
 		}
 		idx.removeEdge(reverse)
 	}
+	idx.dirty = true
 }
 
 // GetRelationsForTask returns all edges where task is source OR target
 func (idx *Index) GetRelationsForTask(taskID int) []task.RelationEdge {
+	idx.syncIfStale()
 	seen := make(map[task.RelationEdge]bool)
 	var result []task.RelationEdge
 
@@ -538,6 +623,7 @@ func (idx *Index) GetRelationsForTask(taskID int) []task.RelationEdge {
 
 // GetBlockers returns target IDs from blocked_by edges where source == taskID
 func (idx *Index) GetBlockers(taskID int) []int {
+	idx.syncIfStale()
 	var blockers []int
 	for _, e := range idx.relationsBySource[taskID] {
 		if e.Type == BlockingRelationType {
@@ -580,5 +666,6 @@ func (idx *Index) RemoveAllRelationsForTask(taskID int) []task.RelationEdge {
 	}
 	delete(idx.relationsByTarget, taskID)
 
+	idx.dirty = true
 	return removed
 }
