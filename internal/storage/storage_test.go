@@ -891,6 +891,117 @@ func TestIndex_NextTodo_PrioritizesInProgressParentSubtasks(t *testing.T) {
 	}
 }
 
+func TestIndex_NextTodo_PrioritizesInProgressStandaloneTask(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+
+	inProgress := &task.Task{
+		ID:        1,
+		Title:     "Resume me",
+		Status:    task.StatusInProgress,
+		Priority:  task.PriorityLow,
+		Type:      "feature",
+		CreatedAt: now.Add(2 * time.Hour),
+	}
+	competingTodo := &task.Task{
+		ID:        2,
+		Title:     "Fresh todo",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityCritical,
+		Type:      "feature",
+		CreatedAt: now,
+	}
+
+	if err := storage.Save(inProgress); err != nil {
+		t.Fatalf("Save(inProgress) error = %v", err)
+	}
+	if err := storage.Save(competingTodo); err != nil {
+		t.Fatalf("Save(competingTodo) error = %v", err)
+	}
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 1 {
+		t.Errorf("NextTodo() ID = %d, want 1 (in-progress standalone task)", next.ID)
+	}
+}
+
+func TestIndex_NextTodo_PrioritizesInProgressSubtaskOverTodoWork(t *testing.T) {
+	dir := t.TempDir()
+	storage := NewMarkdownStorage(dir)
+	idx := NewIndex(dir, storage)
+
+	now := time.Now().UTC()
+
+	inProgressParent := &task.Task{
+		ID:        1,
+		Title:     "Started parent",
+		Status:    task.StatusInProgress,
+		Priority:  task.PriorityMedium,
+		Type:      "feature",
+		CreatedAt: now.Add(2 * time.Hour),
+	}
+	parentID := 1
+	inProgressSubtask := &task.Task{
+		ID:        2,
+		ParentID:  &parentID,
+		Title:     "Resume started subtask",
+		Status:    task.StatusInProgress,
+		Priority:  task.PriorityLow,
+		Type:      "feature",
+		CreatedAt: now.Add(3 * time.Hour),
+	}
+	competingTodoSibling := &task.Task{
+		ID:        3,
+		ParentID:  &parentID,
+		Title:     "Not started sibling",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityHigh,
+		Type:      "feature",
+		CreatedAt: now.Add(4 * time.Hour),
+	}
+	competingStandalone := &task.Task{
+		ID:        4,
+		Title:     "Critical todo",
+		Status:    task.StatusTodo,
+		Priority:  task.PriorityCritical,
+		Type:      "feature",
+		CreatedAt: now,
+	}
+
+	if err := storage.Save(inProgressParent); err != nil {
+		t.Fatalf("Save(inProgressParent) error = %v", err)
+	}
+	if err := storage.Save(inProgressSubtask); err != nil {
+		t.Fatalf("Save(inProgressSubtask) error = %v", err)
+	}
+	if err := storage.Save(competingTodoSibling); err != nil {
+		t.Fatalf("Save(competingTodoSibling) error = %v", err)
+	}
+	if err := storage.Save(competingStandalone); err != nil {
+		t.Fatalf("Save(competingStandalone) error = %v", err)
+	}
+	if err := idx.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	next := idx.NextTodo()
+	if next == nil {
+		t.Fatal("NextTodo() returned nil")
+	}
+	if next.ID != 2 {
+		t.Errorf("NextTodo() ID = %d, want 2 (in-progress subtask)", next.ID)
+	}
+}
+
 func TestIndex_NextTodo_TodoParentSubtasksNotPrioritized(t *testing.T) {
 	dir := t.TempDir()
 	storage := NewMarkdownStorage(dir)
