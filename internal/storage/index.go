@@ -430,6 +430,40 @@ type nextTodoGroup struct {
 	tasks []*task.Task
 }
 
+func (idx *Index) isActionableForNextTodo(e *IndexEntry) bool {
+	if e.Status != task.StatusTodo && e.Status != task.StatusInProgress {
+		return false
+	}
+	if idx.HasSubtasks(e.ID) {
+		return false
+	}
+	return !idx.isBlocked(e.ID)
+}
+
+func (idx *Index) nextTodoGroupForEntry(e *IndexEntry) (int, nextTodoGroupKey) {
+	groupID := e.ID
+	key := nextTodoGroupKey{
+		priorityOrder:    e.Priority.Order(),
+		createdAt:        e.CreatedAt,
+		id:               e.ID,
+		inProgressParent: e.Status == task.StatusInProgress,
+	}
+
+	if e.ParentID != nil {
+		if parent, ok := idx.GetEntry(*e.ParentID); ok {
+			groupID = parent.ID
+			key = nextTodoGroupKey{
+				priorityOrder:    parent.Priority.Order(),
+				createdAt:        parent.CreatedAt,
+				id:               parent.ID,
+				inProgressParent: parent.Status == task.StatusInProgress,
+			}
+		}
+	}
+
+	return groupID, key
+}
+
 // NextTodo returns the highest priority actionable todo task.
 // Parent tasks with subtasks are skipped. Subtasks inherit their parent's
 // priority, creation date, and ID for group selection, then compete within the
@@ -439,37 +473,12 @@ func (idx *Index) NextTodo() *task.Task {
 	groups := make(map[int]*nextTodoGroup)
 
 	for _, e := range idx.entries {
-		if e.Status != task.StatusTodo {
-			continue
-		}
-		// Skip parents that have subtasks
-		if idx.HasSubtasks(e.ID) {
-			continue
-		}
-		// Skip blocked tasks (have unresolved blocked_by relations)
-		if idx.isBlocked(e.ID) {
+		if !idx.isActionableForNextTodo(e) {
 			continue
 		}
 
 		candidate := entryToTask(e)
-		groupID := e.ID
-		key := nextTodoGroupKey{
-			priorityOrder: e.Priority.Order(),
-			createdAt:     e.CreatedAt,
-			id:            e.ID,
-		}
-
-		if e.ParentID != nil {
-			if parent, ok := idx.GetEntry(*e.ParentID); ok {
-				groupID = parent.ID
-				key = nextTodoGroupKey{
-					priorityOrder:    parent.Priority.Order(),
-					createdAt:        parent.CreatedAt,
-					id:               parent.ID,
-					inProgressParent: parent.Status == task.StatusInProgress,
-				}
-			}
-		}
+		groupID, key := idx.nextTodoGroupForEntry(e)
 
 		group, ok := groups[groupID]
 		if !ok {
@@ -505,6 +514,9 @@ func (idx *Index) NextTodo() *task.Task {
 
 	winningGroup := groupList[0].tasks
 	sort.Slice(winningGroup, func(i, j int) bool {
+		if winningGroup[i].Status != winningGroup[j].Status {
+			return winningGroup[i].Status == task.StatusInProgress
+		}
 		if winningGroup[i].Priority.Order() != winningGroup[j].Priority.Order() {
 			return winningGroup[i].Priority.Order() < winningGroup[j].Priority.Order()
 		}
