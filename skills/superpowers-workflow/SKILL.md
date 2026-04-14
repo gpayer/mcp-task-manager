@@ -18,6 +18,8 @@ These agents should be defined as standalone TOML files in Codex's documented cu
 
 This skill is the workflow controller. It owns task selection, task state changes, fallback decisions, phase transitions, and communication between role agents and the user when needed. It must execute the workflow sequentially: after each `spawn_agent` call, wait for that subagent to finish before doing any other workflow step. Do not rely on `subagent_notification` to resume the workflow.
 
+The workflow controller must not spawn subagents with a forked or cloned context, e.g. `fork_context` must be `false`.
+
 **Announce at start:** "Using superpowers-workflow to execute pending tasks."
 
 **Requires:**
