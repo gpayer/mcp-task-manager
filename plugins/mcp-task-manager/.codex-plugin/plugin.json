@@ -1,0 +1,26 @@
+{
+  "name": "mcp-task-manager",
+  "version": "1.0.1",
+  "description": "Task manager MCP server with superpowers workflow integration",
+  "author": {
+    "name": "Gernot Messow",
+    "url": "https://github.com/gpayer"
+  },
+  "homepage": "https://github.com/gpayer/mcp-task-manager",
+  "repository": "https://github.com/gpayer/mcp-task-manager",
+  "license": "MIT",
+  "keywords": ["task-manager", "mcp", "workflow", "superpowers", "subtasks"],
+  "interface": {
+    "displayName": "MCP Task Manager",
+    "shortDescription": "Task management for Codex via a local MCP server.",
+    "longDescription": "Manage project tasks, subtasks, relations, and workflow state through the MCP Task Manager plugin for Codex.",
+    "developerName": "Gernot Messow",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/gpayer/mcp-task-manager",
+    "defaultPrompt": [
+      "List my highest priority open tasks.",
+      "Start the next actionable task.",
+      "Show blocked tasks and their blockers."
+    ]
+  }
+}
