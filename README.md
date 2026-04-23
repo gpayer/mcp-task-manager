@@ -126,17 +126,23 @@ Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_confi
 
 ### Claude Code Integration
 
-MCP Task Manager includes a plugin for Claude Code that enables automated task execution with the superpowers plugin.
+Use this path for Claude Code specifically. The Claude plugin and the Codex plugin are packaged differently, so the Claude flow still uses an explicit `claude mcp add` step.
 
 **Setup:**
 
-1. Add the MCP server:
+1. Install the `mcp-task-manager` binary so Claude can launch it:
+
+```bash
+go install github.com/gpayer/mcp-task-manager/cmd/mcp-task-manager@latest
+```
+
+2. Add the MCP server in Claude Code:
 
 ```bash
 claude mcp add --transport stdio task-manager -- mcp-task-manager
 ```
 
-2. Install the plugin (includes the superpowers-workflow skill):
+3. Install the Claude Code plugin:
 
 ```bash
 # Add the marketplace
@@ -148,25 +154,41 @@ claude mcp add --transport stdio task-manager -- mcp-task-manager
 
 **Usage:**
 
-Use the `/mcp-task-manager:superpowers-workflow` skill to automatically execute pending tasks with the repo-local `planner`, `coder`, and `reviewer` agents. If one of those agents cannot be used, the workflow stops and asks before allowing a fallback.
+Use the Claude Code command `/mcp-task-manager:superpowers-workflow` to automatically execute pending tasks with installed `planner`, `coder`, and `reviewer` agents. If one of those agents cannot be used, the workflow stops and asks before allowing a fallback.
 
 ### Codex Integration
 
-**Add the MCP server:**
+Use this path for Codex specifically. This repository now acts as a Codex marketplace root: the marketplace catalog lives in `.agents/plugins/marketplace.json`, and the installable Codex plugin package is `plugins/mcp-task-manager/`.
+
+**Prerequisite: install the MCP server binary first**
+
+The Codex plugin package includes `superpowers-workflow`, `/execute-all`, and a packaged `.mcp.json`, but it still expects the `mcp-task-manager` executable to already be available on your `PATH`:
 
 ```bash
-codex mcp add task-manager -- mcp-task-manager
+go install github.com/gpayer/mcp-task-manager/cmd/mcp-task-manager@latest
 ```
 
-**Paste into Codex to install the skills and agents:**
+**Add this marketplace and install the plugin**
+
+```bash
+codex plugin marketplace add gpayer/mcp-task-manager
+```
+
+Inside Codex, install the packaged plugin from that marketplace:
 
 ```text
-Fetch https://raw.githubusercontent.com/gpayer/mcp-task-manager/main/.codex/INSTALL.md and execute the installation steps exactly.
+/plugin install mcp-task-manager@mcp-task-manager
 ```
 
-**Usage:**
+The plugin package wires in the MCP server definition from `plugins/mcp-task-manager/.mcp.json`, so you do not need a separate `codex mcp add` step as long as `mcp-task-manager` is already installed and resolvable by name.
 
-Use the `$superpowers-workflow` skill to automatically execute pending tasks with the repo-local `planner`, `coder`, and `reviewer` agents. If one of those agents cannot be used, the workflow stops and asks before allowing a fallback.
+**Optional: install the role agents used by the workflow**
+
+The packaged plugin does not register personal `planner`, `coder`, or `reviewer` agents for you. If you want the workflow to use those roles instead of asking for fallback approval, create or copy those agent definitions into Codex's standard custom-agent locations (`~/.codex/agents/` for personal setup or `.codex/agents/` for project-scoped setup). This repository provides reference TOML definitions under `.codex/agents/`.
+
+**Usage**
+
+Use the Codex skill `$superpowers-workflow` or the packaged command `/execute-all` to automatically execute pending tasks with installed `planner`, `coder`, and `reviewer` agents. If one of those agents cannot be used, the workflow stops and asks before allowing a fallback.
 
 ## MCP Tools
 
