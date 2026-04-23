@@ -10,6 +10,8 @@
   "repository": "https://github.com/gpayer/mcp-task-manager",
   "license": "MIT",
   "keywords": ["task-manager", "mcp", "workflow", "superpowers", "subtasks"],
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "MCP Task Manager",
     "shortDescription": "Task management for Codex via a local MCP server.",

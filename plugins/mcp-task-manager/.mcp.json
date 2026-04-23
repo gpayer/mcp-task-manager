@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "task-manager": {
+      "command": "mcp-task-manager"
+    }
+  }
+}
