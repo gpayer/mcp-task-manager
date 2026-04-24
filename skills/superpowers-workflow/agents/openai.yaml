@@ -1,0 +1,4 @@
+interface:
+  display_name: "Superpowers Workflow"
+  short_description: "Run task-manager work through planner, coder, reviewer"
+  default_prompt: "Use $superpowers-workflow to execute pending task-manager work."

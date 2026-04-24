@@ -23,6 +23,8 @@
             pkgs.gopls
             pkgs.gh
             pkgs.bubblewrap
+            pkgs.python313
+            pkgs.python3Packages.pyyaml
           ];
 
           shellHook = ''
