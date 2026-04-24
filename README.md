@@ -171,7 +171,7 @@ go install github.com/gpayer/mcp-task-manager/cmd/mcp-task-manager@latest
 **Add this marketplace and install the plugin**
 
 ```bash
-codex plugin marketplace add gpayer/mcp-task-manager
+codex plugin marketplace add https://github.com/gpayer/mcp-task-manager
 ```
 
 Inside Codex, install the packaged plugin from that marketplace:
