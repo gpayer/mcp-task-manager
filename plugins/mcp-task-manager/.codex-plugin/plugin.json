@@ -1,6 +1,6 @@
 {
   "name": "mcp-task-manager",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "Task manager MCP server with superpowers workflow integration",
   "author": {
     "name": "Gernot Messow",
