@@ -162,7 +162,7 @@ Use this path for Codex specifically. This repository now acts as a Codex market
 
 **Prerequisite: install the MCP server binary first**
 
-The Codex plugin package includes `superpowers-workflow`, `/execute-all`, and a packaged `.mcp.json`, but it still expects the `mcp-task-manager` executable to already be available on your `PATH`:
+The Codex plugin package includes `superpowers-workflow`, `/execute-all`, packaged role agents, and a packaged `.mcp.json`, but it still expects the `mcp-task-manager` executable to already be available on your `PATH`:
 
 ```bash
 go install github.com/gpayer/mcp-task-manager/cmd/mcp-task-manager@latest
@@ -180,11 +180,7 @@ Inside Codex, install the packaged plugin from that marketplace:
 /plugin install mcp-task-manager@mcp-task-manager
 ```
 
-The plugin package wires in the MCP server definition from `plugins/mcp-task-manager/.mcp.json`, so you do not need a separate `codex mcp add` step as long as `mcp-task-manager` is already installed and resolvable by name.
-
-**Optional: install the role agents used by the workflow**
-
-The packaged plugin does not register personal `planner`, `coder`, or `reviewer` agents for you. If you want the workflow to use those roles instead of asking for fallback approval, create or copy those agent definitions into Codex's standard custom-agent locations (`~/.codex/agents/` for personal setup or `.codex/agents/` for project-scoped setup). This repository provides reference TOML definitions under `.codex/agents/`.
+The plugin package wires in the MCP server definition from `plugins/mcp-task-manager/.mcp.json` and role agents from `plugins/mcp-task-manager/agents/`, so you do not need a separate `codex mcp add` step or manual agent copy as long as `mcp-task-manager` is already installed and resolvable by name.
 
 **Usage**
 

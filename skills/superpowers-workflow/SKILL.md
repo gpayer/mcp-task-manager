@@ -9,7 +9,7 @@ description: Execute task manager tasks using installed planner, coder, and revi
 
 Execute tasks from the task manager MCP using Codex custom role agents.
 
-These agents should be defined as standalone TOML files in Codex's documented custom-agent locations: project-scoped `.codex/agents/` or personal `~/.codex/agents/`. Do not assume free-form Markdown files under `agents/` are discoverable by Codex.
+These agents are packaged with the `mcp-task-manager` Codex plugin under `plugins/mcp-task-manager/agents/`. The repo-local `.codex/agents/` files are compatibility symlinks to those packaged definitions, and users may still override them with Codex's documented custom-agent locations.
 
 - Parent tasks without subtasks dispatch `planner`.
 - Executable subtasks dispatch `coder`.
@@ -30,7 +30,7 @@ The workflow controller must not spawn subagents with a forked or cloned context
 
 For each role, resolve agents in this order:
 
-1. The matching role-specific Codex agent, using the built-in role when available or the configured custom agent from `.codex/agents/` or `~/.codex/agents/`
+1. The matching role-specific Codex agent, using the packaged plugin agent when available or a configured override from `.codex/agents/` or `~/.codex/agents/`
 2. Another available role-appropriate agent
 3. Default agent
 
@@ -106,7 +106,7 @@ Call `mcp__task-manager__start_task` with the parent task ID before dispatch.
 
 #### Step 2: Resolve Planning Agent
 
-Prefer the `planner` custom agent from Codex's configured agent directories.
+Prefer the `planner` custom agent provided by the installed plugin.
 
 If it cannot be used:
 - do not continue automatically
@@ -169,7 +169,7 @@ For each executable subtask, dispatch the role agent the task actually requires.
 
 #### Step 2: Resolve `coder`
 
-Prefer the `coder` custom agent from Codex's configured agent directories.
+Prefer the `coder` custom agent provided by the installed plugin.
 
 If it cannot be used:
 - stop before dispatch
@@ -216,7 +216,7 @@ If it cannot be used:
 - ask the user which fallback to allow
 - continue only after the user confirms
 
-Prefer the `reviewer` custom agent from Codex's configured agent directories when a review dispatch is required.
+Prefer the `reviewer` custom agent provided by the installed plugin when a review dispatch is required.
 
 #### Step 5: Dispatch `reviewer`
 
