@@ -13,6 +13,7 @@ This packaged skill is self-contained for plugin installation:
 
 - It expects a `task-manager` MCP server to be available from this plugin's `.mcp.json`
 - It packages Codex custom agents named `planner`, `coder`, and `reviewer` under `agents/`
+- It expects `/install-agents` to have been run after plugin install or upgrade so those packaged agents are registered in `~/.codex/agents/`
 - Those agents should follow these role boundaries:
   - `planner`: planning-only, creates executable subtasks and does not implement code
   - `coder`: implementation-only, executes one assigned task and reports status clearly
@@ -35,13 +36,13 @@ The workflow controller must not spawn subagents with a forked or cloned context
 
 For each role, resolve agents in this order:
 
-1. The matching role-specific Codex agent, using the packaged plugin agent when available or a configured override from Codex's agent discovery locations
+1. The matching role-specific Codex agent, using the globally registered plugin agent from `~/.codex/agents/` when available or another configured override from Codex's agent discovery locations
 2. Another available role-appropriate agent
 3. Default agent
 
 Never silently downgrade.
 
-If the preferred packaged custom agent cannot be used, stop and ask the user which fallback to allow before continuing. Make the downgrade explicit so the user understands the workflow is leaving the intended task-manager guardrails.
+If the preferred custom agent cannot be used, stop and ask the user which fallback to allow before continuing. Make the downgrade explicit so the user understands the workflow is leaving the intended task-manager guardrails. If the missing role is `planner`, `coder`, or `reviewer`, tell the user to run `/install-agents` and restart Codex.
 
 Apply this rule independently for:
 

@@ -9,7 +9,7 @@ description: Execute task manager tasks using installed planner, coder, and revi
 
 Execute tasks from the task manager MCP using Codex custom role agents.
 
-These agents are packaged with the `mcp-task-manager` Codex plugin under `plugins/mcp-task-manager/agents/`. The repo-local `.codex/agents/` files are compatibility symlinks to those packaged definitions, and users may still override them with Codex's documented custom-agent locations.
+These agents are packaged with the `mcp-task-manager` Codex plugin under `plugins/mcp-task-manager/agents/`. The repo-local `.codex/agents/` files are compatibility symlinks to those packaged definitions. Installed plugin users must run `/install-agents` after install or upgrade so the packaged agents are linked into `~/.codex/agents/` for global discovery.
 
 - Parent tasks without subtasks dispatch `planner`.
 - Executable subtasks dispatch `coder`.
@@ -30,13 +30,15 @@ The workflow controller must not spawn subagents with a forked or cloned context
 
 For each role, resolve agents in this order:
 
-1. The matching role-specific Codex agent, using the packaged plugin agent when available or a configured override from `.codex/agents/` or `~/.codex/agents/`
+1. The matching role-specific Codex agent, using the registered plugin agent from `.codex/agents/` or `~/.codex/agents/` when available
 2. Another available role-appropriate agent
 3. Default agent
 
 Never silently downgrade.
 
 If the preferred Codex custom agent cannot be used, stop and ask the user which fallback to allow before continuing. Make the downgrade explicit so the user understands the workflow is leaving the intended task-manager guardrails.
+
+If the missing role is `planner`, `coder`, or `reviewer`, tell the user to run `/install-agents` and restart Codex before falling back.
 
 Apply this rule independently for:
 

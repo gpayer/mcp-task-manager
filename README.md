@@ -162,7 +162,7 @@ Use this path for Codex specifically. This repository now acts as a Codex market
 
 **Prerequisite: install the MCP server binary first**
 
-The Codex plugin package includes `superpowers-workflow`, `/execute-all`, packaged role agents, and a packaged `.mcp.json`, but it still expects the `mcp-task-manager` executable to already be available on your `PATH`:
+The Codex plugin package includes `superpowers-workflow`, `/execute-all`, `/install-agents`, packaged role agents, and a packaged `.mcp.json`, but it still expects the `mcp-task-manager` executable to already be available on your `PATH`:
 
 ```bash
 go install github.com/gpayer/mcp-task-manager/cmd/mcp-task-manager@latest
@@ -180,7 +180,17 @@ Inside Codex, install the packaged plugin from that marketplace:
 /plugin install mcp-task-manager@mcp-task-manager
 ```
 
-The plugin package wires in the MCP server definition from `plugins/mcp-task-manager/.mcp.json` and role agents from `plugins/mcp-task-manager/agents/`, so you do not need a separate `codex mcp add` step or manual agent copy as long as `mcp-task-manager` is already installed and resolvable by name.
+The plugin package wires in the MCP server definition from `plugins/mcp-task-manager/.mcp.json`, so you do not need a separate `codex mcp add` step as long as `mcp-task-manager` is already installed and resolvable by name.
+
+**Install the role agents globally**
+
+Codex discovers reusable subagents from `~/.codex/agents/` or project-local `.codex/agents/`. After installing or upgrading the plugin, run the packaged installer command once:
+
+```text
+/install-agents
+```
+
+This creates `planner`, `coder`, and `reviewer` symlinks in `~/.codex/agents/` pointing at the installed plugin's packaged agent definitions. Restart Codex after running it so the agents are available in every session.
 
 **Usage**
 

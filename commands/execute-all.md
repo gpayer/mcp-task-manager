@@ -7,7 +7,7 @@ Use the packaged `superpowers-workflow` skill from the `mcp-task-manager` Codex 
 Expected setup:
 - Install the plugin from this marketplace with `/plugin install mcp-task-manager@mcp-task-manager`
 - Make sure the `mcp-task-manager` binary is installed so the packaged `.mcp.json` can launch the `task-manager` server
-- Optionally register `planner`, `coder`, and `reviewer` custom agents if you want the workflow to use those preferred roles without asking for fallback approval
+- Run `/install-agents` after installing or upgrading the plugin so `planner`, `coder`, and `reviewer` are registered in `~/.codex/agents/`
 
 The workflow will:
 1. Get the next todo task from the task manager
